@@ -142,6 +142,13 @@ class SimulationLineageDebugger:
     # displaying it right away, so that we can appropriately show it with the
     # relevant generation summary.
     def _on_breeding(self, generation, parent, mate, child):
+        # Keep track of the number of parents and children for each individual
+        # to show in the generation summary.
+        if mate is None:
+            child.num_parents = 1
+        else:
+            child.num_parents = 2
+        parent.num_children += 1
         if (parent.identifier in self.parent_watch_list or
                 (mate and mate.identifier in self.parent_watch_list) or
                 child.identifier in self.child_watch_list):

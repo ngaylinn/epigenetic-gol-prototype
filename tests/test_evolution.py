@@ -114,6 +114,28 @@ class TestSelection(unittest.TestCase):
                 expected_samples = 8 * fitness_score / total_fitness
                 self.assertAlmostEqual(expected_samples, sample_count, delta=1)
 
+    def test_selection_with_no_fit_individuals(self):
+        """Edge case where all individuals have fitness 0."""
+        fitness_scores = [0, 0, 0, 0, 0, 0, 0, 0]
+        population = mock_population(fitness_scores)
+        selection = evolution.select(population, len(population))
+        # The right number of individuals were selected.
+        self.assertEqual(len(population), len(selection))
+        # We didn't just pick the same individual N times.
+        self.assertFalse(
+            all(individual is population[0] for individual in selection))
+
+    def test_selection_with_one_fit_individual(self):
+        """Edge case where only one individual has non-zero fitness."""
+        fitness_scores = [1, 0, 0, 0, 0, 0, 0, 0]
+        population = mock_population(fitness_scores)
+        selection = evolution.select(population, len(population))
+        # The right number of individuals were selected.
+        self.assertEqual(len(population), len(selection))
+        # The only fit individual was selectedN times.
+        self.assertTrue(
+            all(individual is population[0] for individual in selection))
+
 
 if __name__ == '__main__':
     unittest.main()

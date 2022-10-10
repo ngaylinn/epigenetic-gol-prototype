@@ -12,7 +12,9 @@ perform well on a number of fitness goals. First, several hand-tuned
 configurations are pitted against each other to see what they can do. Second,
 the genetic algorithm is applied to tuning its own configuration and
 optimizing its own search process, improving performance beyond what could be
-achieved with human design.
+achieved with human design. That is, I'm experimenting with self-determination
+by using a genetic algorithm to design a genetic algorithm and steer its
+evolution.
 
 This isn’t exactly science yet. It’s more of a “try and see what works”
 exploration than an attempt to test any specific hypothesis. It’s not yet
@@ -395,7 +397,7 @@ reasons:
       considered. In the second phase of experimentation, the phenotype
       construction process is left open ended (to a limited extent) and the
       genetic algorithm itself is given influence over its design.
-      Therefore, *both* the genotype *and* its inrepretation are outputs of
+      Therefore, *both* the genotype *and* its interpretation are outputs of
       this program.
 - **Custom Mutations / Latent Genes**:
     - Many genetic algorithms depend on “custom mutations” to improve

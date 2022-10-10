@@ -22,7 +22,7 @@ import kernel
 EXPERIMENT_GOALS = {}
 
 
-def get_frames_needed(fitness_func):
+def get_frames_needed(fitness_function):
     """Look up the frames needed to evaluate a fitness goal specified by name.
 
     This is used to improve performance by avoiding unnecessary memory
@@ -30,8 +30,8 @@ def get_frames_needed(fitness_func):
 
     Parameters
     ----------
-    goal_name : str
-        The name of one of the fitness functions defined below.
+    fitness_function : Callable
+        A fitness function declared using the @fitness_goal decorator.
 
     Result
     ------
@@ -43,7 +43,36 @@ def get_frames_needed(fitness_func):
     """
     # This metadata is attached to the function object by the fitness_goal
     # decorator.
-    return fitness_func.frames_needed
+    return fitness_function.frames_needed
+
+
+def evaluate_simulation(fitness_function, simulation):
+    """Evaluate the fitness of a simulation given a specific fitness function.
+
+    This function serves as an adapter from a GameOfLifeSimulation to just the
+    simulation video frames needed by one of the below fitness functions. You
+    probably have no need to call this function directly. The EXPERIMENT_GOALS
+    dictionary is more convenient, and its values are just instances of this
+    function with the first argument bound to the appropriate fitness function
+    for each key / fitness goal name.
+
+    Parameters
+    ----------
+    fitness_function : Callabale
+        A fitness function declared using the @fitness_goal decorator.
+    simulation : GameOfLifeSimulation
+        The simulation to evaluate the fitness of. This simulation should
+        already have been run with the relevant frames (as determined by
+        get_frames_needed) recorded by gol_simulation.simulate.
+
+    Returns
+    -------
+    int
+        A fitness score on an arbitrary scale. Higher values are better.
+    """
+    frames_needed = get_frames_needed(fitness_function)
+    frames = [simulation.frames[i] for i in frames_needed]
+    return fitness_function(*frames)
 
 
 def fitness_goal(frames_needed):
@@ -68,30 +97,25 @@ def fitness_goal(frames_needed):
     # calling fitness_goal evaluates to a decorator that takes the actual
     # goal-specific fitness function as its parameter.
     def decorator(fitness_function):
-        # The result of calling the decorator is a wrapper for the original
-        # function which takes care of extracting the necessary frames and
-        # mapping them to the named parameters of fitness_function.
-        @functools.wraps(fitness_function)
-        def wrapper(simulation):
-            frames = [simulation.frames[i] for i in frames_needed]
-            return fitness_function(*frames)
         # The name of the function being wrapped is used as its identifier when
         # analyzing or outputing experiment results. It's also the key for
         # looking up this fitness_function in EXPERIMENT_GOALS.
         goal_name = fitness_function.__name__
-        EXPERIMENT_GOALS[goal_name] = wrapper
+        # Wrap the fitness function using the evaluate_simulation function to
+        # provide a convenient interface to callers.
+        wrapped_function = functools.partial(
+            evaluate_simulation, fitness_function)
+        EXPERIMENT_GOALS[goal_name] = wrapped_function
         # Track the frames needed list by attaching it to the function. This
         # seemed simpler than creating a parallel global dict for metadata.
-        wrapper.frames_needed = frames_needed
-        # Calling the decorator evaluates to the wrapped function, which is
-        # what ends up getting bound to the function name.
-        # TODO: This is a little confusing, because the actual signature of the
-        # function doesn't match what you see in the source code. Would it be
-        # better to return fitness_function instead? This way you could either
-        # call the fitness function directly by name with one argument per
-        # frame or call the wrapped version which takes a video as its argument
-        # by looking it up in the DEFAULT_GOALS dictionary.
-        return wrapper
+        # Attach it both to the wrapped and unwrapped versions, so that
+        # get_frames_needed doesn't have to care which its called with.
+        fitness_function.frames_needed = frames_needed
+        wrapped_function.frames_needed = frames_needed
+        # This decorator just tracks metadata for the given fitness_function,
+        # but does not modify its behavior. So, calling the decorator evaluates
+        # to the decorated function.
+        return fitness_function
     return decorator
 
 

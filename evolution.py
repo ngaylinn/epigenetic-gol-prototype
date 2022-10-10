@@ -33,23 +33,27 @@ def select(population, count):
     # that is proportional its fitness. The full circumference of that
     # wheel is the total fitness for the population.
     total_fitness = sum(individual.fitness for individual in population)
+    # Handle the degenerate case where everyone has fitness 0 by choosing
+    # individuals at random.
+    if total_fitness == 0:
+        return random.sample(population, count)
     # Pick count equidistant sampling points around the edge of that
     # roulette wheel, starting at a random location.
-    sample_distance = total_fitness / count
-    start_position = random.random() * sample_distance
-    samples = [start_position + i * sample_distance for i in range(count)]
+    sample_period = total_fitness / count
+    sample_offset = random.random() * sample_period
+    samples = [sample_offset + i * sample_period for i in range(count)]
 
     # Walk around the edge of the roulette wheel to figure out which wedge
     # contains each sample point. The individual corresponding to that wedge /
     # sample point will be selected. More fit individuals have bigger wedges
     # which may contain multiple sample points, which means that individual
     # gets selected more than once and can have multiple offspring. Individuals
-    # less fit than the sample_distance may fall between sample points and fail
-    # to get selected and pass on their genes.
+    # with a fitness score smaller than the sample_period may fall between
+    # sample points and fail to get selected and pass on their genes.
     result = []
     # An index into population / the wedges in the roulette wheel. Starting at
     # -1 indicates we have not yet reached a sample point inside the 0th wedge,
-    # but may do so in the loop below.
+    # but will do so in the first iteration of the loop below.
     index = -1
     fitness_so_far = 0
     for sample in samples:
@@ -101,24 +105,17 @@ class Evolvable:
         self.num_parents = 0
         self.num_children = 0
 
-    def breed(self, mate):
-        """Handle reproduction and track parentage for debug purposes."""
-        if self.should_crossover():
-            child = self.make_offspring(mate)
-            child.num_parents = 2
-        else:
-            child = self.make_offspring()
-            child.num_parents = 1
-        if child:
-            self.num_children += 1
-        return child
-
     def should_crossover(self):
         """Return true iff the make_offspring should use crossover.
 
         When true, this individual should reproduce sexually, combining its
         genes with those of a mate. Otherwise, it should reproduce asexually,
         producing offspring based on only its own genes.
+
+        Returns
+        -------
+        bool
+            True iff this breeding should use crossover.
         """
         raise NotImplementedError
 
@@ -137,7 +134,7 @@ class Evolvable:
         ----------
         mate : optional Evolvable
             Another individual from the same population that has been selected
-            as a mate for this breeding. Note that if other is provided, that
+            as a mate for this breeding. Note that if mate is provided, that
             means should_crossover returned True and crossover should be
             performed if applicable.
 
@@ -160,7 +157,7 @@ class Lineage:
 
     This class handles the basic book keeping and statistics tracking of a
     genetic algorithm. To use it, make a subclass and implement
-    make_initiamake_initial_population and evaluate_population for your needs.
+    make_initial_population and evaluate_population for your needs.
 
     Attributes
     ----------
@@ -264,11 +261,10 @@ class Lineage:
         random.shuffle(mates)
         new_population = []
         for parent, mate in zip(parents, mates):
-            # We could be more clever in selection to avoid this situation, but
-            # it seems simpler to just cope with it in this way.
-            if mate is parent:
+            # Pass in None for mate for asexual reproduction.
+            if mate is parent or not parent.should_crossover():
                 mate = None
-            child = parent.breed(mate)
+            child = parent.make_offspring(mate)
             self.per_breeding_callback(generation, parent, mate, child)
             new_population.append(child)
         return new_population
