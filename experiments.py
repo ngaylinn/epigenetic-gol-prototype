@@ -1,4 +1,5 @@
 import math
+import statistics
 
 from progress.bar import IncrementalBar
 
@@ -12,8 +13,8 @@ import kernel
 
 
 POPULATION_SIZE = kernel.NUM_SIMS
-NUM_GENOME_GENERATIONS = 100
-NUM_SIMULATION_GENERATIONS = 200
+NUM_GENOME_GENERATIONS = 5  # 100
+NUM_SIMULATION_GENERATIONS = 5  # 200
 NUM_TRIALS = 5
 
 
@@ -116,16 +117,76 @@ def compare_phenotypes():
     return experiment_data, sample_simulations
 
 
+def normalize_slope(slope):
+    # translate a slope value from a linear regression into a number bewteen
+    # 0 and 100 indicating the angle of the line.
+    return int(100 * (math.atan(slope) + math.pi / 2) / math.pi)
+
+
+def median_slope(trial_lineages):
+    trial_series = [trial.fitness_by_generation for trial in trial_lineages]
+    median_fitness_series = list(
+        map(statistics.median, zip(*trial_series)))
+    generations = list(range(NUM_SIMULATION_GENERATIONS))
+    slope, _ = statistics.linear_regression(generations, median_fitness_series)
+    return normalize_slope(slope)
+
+
+def geomean_slope(trial_lineages):
+    trial_series = [trial.fitness_by_generation for trial in trial_lineages]
+    generations = list(range(NUM_SIMULATION_GENERATIONS))
+    trial_slopes = [
+        normalize_slope(
+            statistics.linear_regression(generations, series).slope)
+        for series in trial_series]
+    return statistics.geometric_mean(trial_slopes)
+
+
+def median_slope_times_max(trial_lineages):
+    trial_series = [trial.fitness_by_generation for trial in trial_lineages]
+    median_fitness_series = list(
+        map(statistics.median, zip(*trial_series)))
+    generations = list(range(NUM_SIMULATION_GENERATIONS))
+    slope, _ = statistics.linear_regression(generations, median_fitness_series)
+    return normalize_slope(slope) * max(median_fitness_series)
+
+
+def geomean_slope_times_max(trial_lineages):
+    trial_series = [trial.fitness_by_generation for trial in trial_lineages]
+    generations = list(range(NUM_SIMULATION_GENERATIONS))
+    trial_slopes = [statistics.linear_regression(generations, series).slope
+                    for series in trial_series]
+    trial_maxes = [max(series) for series in trial_series]
+    x = [max(normalize_slope(slope), 1) * max(max_fitness, 1)
+         for slope, max_fitness in zip(trial_slopes, trial_maxes)]
+    return statistics.geometric_mean(x)
+
+
+GENOME_FITNESS_FUNCTIONS = [
+    median_slope,
+    geomean_slope,
+    median_slope_times_max,
+    geomean_slope_times_max
+]
+
+
 class GenomeLineage(evolution.Lineage):
     """A Lineage subclass for evolving GenomeConfigs."""
-    def __init__(self, fitness_goal, progress_bar):
+    def __init__(self, fitness_goal, progress_bar,
+                 sane_defaults, genome_fitness_func):
         self.fitness_goal = fitness_goal
         self.progress_bar = progress_bar
+        self.sane_defaults = sane_defaults
+        self.genome_fitness_func = genome_fitness_func
+        self.best_simulation = None
         super().__init__()
 
     def make_initial_population(self):
-        return [genome_configuration.GenomeConfig(genome.GENOME) for
-                _ in range(POPULATION_SIZE)]
+        return [
+            genome_configuration.GenomeConfig(
+                genome.GENOME, sane_defaults=self.sane_defaults)
+            for _ in range(POPULATION_SIZE)
+        ]
 
     def evaluate_population(self, population):
         for genome_config in population:
@@ -139,40 +200,33 @@ class GenomeLineage(evolution.Lineage):
                     self.fitness_goal, genome_config, self.progress_bar)
                 lineage.evolve(NUM_SIMULATION_GENERATIONS)
                 trial_lineages.append(lineage)
-            trial_lineages.sort(
-                key=lambda lineage: lineage.best_individual.fitness,
-                reverse=True)
-            lineage = trial_lineages[2]
-            # TODO: Play with this. Should it be the area under the curve? The
-            # rate of growth? Some other function of the lineage?
-            # genome_config.fitness = sum(lineage.fitness_by_generation)
-            genome_config.fitness = 0  # TODO
-            # Record the lineage associated with this genome configuration so
-            # when we find the most fit genome configuration we also have the
-            # lineage that it produced (less fit configurations and their
-            # associate lineages will be forgotten and garbage collected)
-            genome_config.lineage = lineage
+                # The Lineage class will automatically keep track of the best
+                # genome_config for us, but make sure we also keep track of the
+                # best simulation produced by that configuration.
+                genome_config.best_simulation = max(
+                    self.best_simulation, lineage.best_individual)
+            genome_config.fitness = self.genome_fitness_func(trial_lineages)
 
 
-def evolve_genome_config():
+def evolve_genome_config(sane_defaults, genome_fitness_func):
     """Run the phase two experiments."""
-    fitness_goals = ['three_cycle']
+    fitness_goals = {
+        fitness_name: fitness.EXPERIMENT_GOALS[fitness_name]
+        for fitness_name in ['three_cycle']}
     progress_bar = ProgressBar(
         len(fitness_goals) * NUM_GENOME_GENERATIONS *
         NUM_TRIALS * POPULATION_SIZE * NUM_SIMULATION_GENERATIONS)
 
-    sample_simulations = []
     progress_bar.start()
     experiment_data = {}
-    for fitness_goal in fitness_goals:
-        fitness_goal = fitness_goal.name
-        genome_lineage = GenomeLineage(fitness_goal, progress_bar)
+    best_genome_config = None
+    for fitness_name, fitness_goal in fitness_goals.items():
+        genome_lineage = GenomeLineage(
+            fitness_goal, progress_bar, sane_defaults, genome_fitness_func)
         genome_lineage.evolve(NUM_GENOME_GENERATIONS)
-        experiment_data[fitness_goal] = genome_lineage.fitness_by_generation
-        best_by_generation = genome_lineage.best_individual_by_generation
-        for generation, genome_config in enumerate(best_by_generation):
-            simulation_lineage = genome_config.lineage
-            best_simulation = simulation_lineage.best_individual
-            sample_simulations.append(best_simulation)
+        experiment_data[fitness_name] = genome_lineage.fitness_by_generation
+        best_genome_config = max(
+            best_genome_config, genome_lineage.best_individual)
     progress_bar.finish()
-    return experiment_data, sample_simulations
+    best_simulation = best_genome_config.best_simulation
+    return experiment_data, best_genome_config, best_simulation

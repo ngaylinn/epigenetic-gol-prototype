@@ -97,8 +97,6 @@ class Gene:
             The backing data for the instance of this gene owned by the mate
             that donates genes for this breeding. It should be of the type
             specified in self.dtype.
-        crossover_strategy: CrossoverStrategy
-            What crossover behavior to use.
 
         Returns
         -------

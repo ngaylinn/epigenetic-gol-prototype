@@ -69,16 +69,14 @@ EXPERIMENT_CONFIGS = {
     # A baseline GenomeConfig that builds the phenotype directly from a
     # 64x64 grid of bits without further elaboration.
     'control': GenomeConfig(GENOME, {
-        'stamp': GeneConfig(False, False),
-        # TODO: You probably don't need to configure repeat_mode anymore?
-        'repeat_mode': GeneConfig(kernel.REPEAT_NONE, False)}),
+        'stamp': False}),
     'tile': GenomeConfig(GENOME, {
-        'stamp': GeneConfig(True, False),
-        'stamp_offset': GeneConfig((0, 0), False),
-        'repeat_mode': GeneConfig(kernel.REPEAT_2D, False),
-        'repeat_offset': GeneConfig(kernel.STAMP_SHAPE, False)}),
+        'stamp': True,
+        'stamp_offset': (0, 0),
+        'repeat_mode': kernel.REPEAT_2D,
+        'repeat_offset': kernel.STAMP_SHAPE}),
     'stamp': GenomeConfig(GENOME, {
-        'stamp': GeneConfig(True, False)}),
+        'stamp': True}),
     'freeform': GenomeConfig(GENOME)
 }
 

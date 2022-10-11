@@ -132,8 +132,9 @@ def compare_phenotypes():
         plt.close('all')
 
 
-def evolve_genome_configuration():
-    path = 'output/evolve_genome_configuration'
+def evolve_genome_configuration(sane_defaults, genome_fitness_func):
+    func_name = make_title(genome_fitness_func.__name__)
+    path = f'output/evolve_genome_configuration/{sane_defaults} x {func_name}'
     os.makedirs(path, exist_ok=True)
     pickle_filename = f'{path}/experiment_data.pickle'
     experiment_data = {}
@@ -142,17 +143,25 @@ def evolve_genome_configuration():
         with open(pickle_filename, 'rb') as file:
             experiment_data = pickle.load(file)
     else:
-        experiment_data = experiments.evolve_genome_config(path)
+        result = experiments.evolve_genome_config(
+            sane_defaults, genome_fitness_func)
+        experiment_data, best_genome_config, best_simulation = result
+        videos_path = f'{path}/simulation_videos'
+        os.makedirs(videos_path, exist_ok=True)
+        gol_simulation.record_videos([best_simulation], videos_path)
         with open(pickle_filename, 'wb') as file:
             pickle.dump(experiment_data, file)
+        with open(f'{path}/best_genome_config.pickle', 'wb') as file:
+            pickle.dump(best_genome_config, file)
 
     generations = list(range(experiments.NUM_GENOME_GENERATIONS))
     fig = plt.figure()
     for fitness_name, fitness_series in experiment_data.items():
         axis = fig.add_subplot()
-        axis.plot(generations, fitness_series)
+        axis.plot(generations, fitness_series, label=make_title(fitness_name))
+        axis.legend()
     fig.savefig(f'{path}/summary.png')
-    plt.show()
+    plt.close('all')
 
 
 def main():
@@ -166,11 +175,16 @@ def main():
     random.seed(42)
     # Capture sample phenotypes to help explain what the genome configurations
     # do and what the experiments are actually testing.
-    genome_config_samples()
+    # TODO: Re-enable
+    # genome_config_samples()
     # Run the phase one experiments, comparing the performance of all the
     # predefined genome configurations on all the fitness goals.
-    compare_phenotypes()
+    # TODO: Re-enable
+    # compare_phenotypes()
     # TODO: Figure out the phase two experiments.
+    for sane_defaults in (True, False):
+        for genome_fitness_func in experiments.GENOME_FITNESS_FUNCTIONS:
+            evolve_genome_configuration(sane_defaults, genome_fitness_func)
 
 
 if __name__ == '__main__':
