@@ -89,8 +89,8 @@ class SimulationLineageDebugger:
         """
         self.min_fitness_delta = -threshold
 
-    def inspect_breading(self, parent_id=None, child_id=None):
-        """Visualize a breeding event once it happens.
+    def break_on_breeding_event(self, parent_id=None, child_id=None):
+        """Break when chosen inidividuals are born / make offspring.
 
         Calling this method has no immediate effect, but once you call the
         lineage's evolve method, this will show a visualization of the desired

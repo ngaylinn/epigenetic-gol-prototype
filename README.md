@@ -4,7 +4,7 @@ This is a prototype for a kind of multi-level genetic algorithm demonstrating a
 form of self-determination. The purpose is to give a concrete example of what
 such an algorithm would look like, to motivate and serve as a foundation for
 future work in this space. Although this algorithm is inherently complex, this
-version is meant to be as simple as possible. There’s much room for improvement
+version is meant to be as simple as possible. There's much room for improvement
 and elaboration, but that is left for [future work](#future-work).
 
 For this demo, the algorithm is used to evolve Game of Life scenarios that
@@ -16,17 +16,17 @@ achieved with human design. That is, I'm experimenting with self-determination
 by using a genetic algorithm to design a genetic algorithm and steer its
 evolution.
 
-This isn’t exactly science yet. It’s more of a “try and see what works”
-exploration than an attempt to test any specific hypothesis. It’s not yet
+This isn't exactly science yet. It's more of a “try and see what works”
+exploration than an attempt to test any specific hypothesis. It's not yet
 grounded in established work in the AI field. Nothing here has been analyzed or
-justified with appropriate mathematical riggor. That will come later.
+justified with appropriate mathematical rigor. That will come later.
 
 ***TODO: once you've figured out the outer loop and generated all the examples
 you're going to, grab some eye-catching GOL videos from the output directory***
 
 # Game of Life
 
-This demo uses Conway’s Game of Life (GOL) as the toy universe for a genetic
+This demo uses Conway's Game of Life (GOL) as the toy universe for a genetic
 algorithm. For those not familiar with the GOL, consider reading this
 [overview](https://conwaylife.com/wiki/Conway's_Game_of_Life) and spending some
 time playing with this [interactive demo](https://playgameoflife.com/).
@@ -36,16 +36,16 @@ is producing a *program* that needs to be executed and evaluated for fitness,
 not a single output value. This will be important for [future
 work](#future-work), where this algorithm may be adapted to different sorts of
 programming tasks. As computer programs go, a GOL scenario is about as simple
-as they come. It takes no input, it’s fully deterministic, has no dependencies,
+as they come. It takes no input, it's fully deterministic, has no dependencies,
 and aside from the game board itself it has no state or output.
 
-Other reasons for using the GOL are that it’s relatively well known and
+Other reasons for using the GOL are that it's relatively well known and
 produces nice visuals that make it clear how well the genetic algorithm is
-performing. It’s also easy to optimize with [parallel
+performing. It's also easy to optimize with [parallel
 execution](#design-considerations).
 
 That said, doing cool things with the GOL is *not* a primary goal for this
-project. If you’re a GOL aficionado and would like to help make this work more
+project. If you're a GOL aficionado and would like to help make this work more
 interesting and useful to your community, your input would be very welcome!
 Please [contact the author](mailto:nate.gaylinn@gmail.com) for possible
 collaborations.
@@ -57,27 +57,59 @@ genetic algorithms for a general audience, see ***TODO: link to blog post***
 This demo is structured so as to run a series of experiments and generate all
 the data and visualizations needed to summarize the results found in this
 README file. A major focus of this demo is comparing how different genome
-configurations perform with different fitness goals. There is no one “best
-design” for a GOL genetic algorithm. What design is preferred (the genome
-configuration) depends on what sorts of GOL scenarios are considered to be the
-best (fitness goals).
+configurations (`GenomeConfig`s) perform with different fitness goals. There is
+no one “best design” for a GOL genetic algorithm. Which configuration performs
+better depends on what sorts of GOL scenarios are considered to be the better
+(fitness goals).
 
 ## Genome Configurations
 
-This project has four predefiend ways to generate GOL scenarios, which are
-expressed in terms of `GenomeConfigurations`. Basically, this project
-transforms a genotype (initially just random bits) into a phenotype (the
-initial state of a GOL board). How to interpret the raw data of the genotype
-and what to do with it is determined by the `GenomeConfiguration`, which
-decides whether each gene is set to a fixed value or randomized and how it is
-allowed to change over generations. Different `GenomeConfigurations` allow the
-genetic algorithm to explore different subsets of the phenotype space and
-discover different solutions to fitness challenges.
+This project represents GOL scenarios using a model loosely inspired by
+genetics. The main purpose of these experiments is to compare different
+ways of interpreting and modifying the genetic code. That requires a fairly
+complicated genetic model, which includes several related concepts:
+- **Gene**: The basic unit of information in the `GENOME`. Each `Gene` represents
+  some data or option used to produce the GOL simulation. For instance,
+  there's a `Gene` representing a 2D grid of data that can be copied onto the
+  game board, and another `Gene` representing what portion of that grid should be
+  used. Each `Gene` has a type and a range of possible values. When breeding two
+  individuals, `Gene`s are the unit of recombination. That is, we always keep
+  one copy of each `Gene`, and the mutation and crossover operations respect the
+  type and boundaries of each `Gene` (instead of treating the `Genotype` as an
+  undifferentiated string of bits).
+- **Genome**: A collection of all `Gene`s used to produce a GOL simulation, and
+  their allowed values. The genome represents the space of possible GOL
+  simulations which the genetic algorithm will search over. It can be combined
+  with a `GenomeConfig` to produce a `Genotype`. This project has just one
+  genome used for all GOL simulations (`genome.GENOME`).
+- **GenomeConfig**: Constrains a genome and its evolution. It is
+  responsible for two things: rates of mutation / crossover, and deciding
+  which `Gene`s are randomized / fixed during evolution. By fixing a `Gene` to a
+  specific value, the `GenomeConfig` can restrict what sorts of GOL
+  scenarios are possible. This might make the process of evolution more
+  efficient, by avoiding less fruitful paths.
+- **Genotype**: A concrete instantiation of the genome used by a particular
+  individual to make a GOL simulation. The genetic algorithm starts with
+  randomized `Genotype`s, then evolves them with breeding and mutation to new
+  `Genotype`s that produce more fit GOL simulations. What `Genotype`s are allowed
+  and how they change through the experiment is determined by the
+  `GenomeConfig`.
+
+This project has four predefined `GenomeConfig`s. These are relatively
+simple, naive strategies for making GOL scenarios with different properties.
+They serve to show how different strategies are better for different fitness
+goals, and as a baseline for comparison to `GenomeConfig`s that were
+evolved to fit specific fitness goals.
 
 ### Control
-The simplest GenomeConfiguration is just a randomized 64x64 grid of cells,
-populated with a range of different densities.
+This is the simplest `GenomeConfig`, primarily used as a baseline to compare
+the others against. In the Control configuration, the genotype is interpreted
+as a literal encoding of the initial GOL board, nothing more than a 64x64 grid
+of simple on / off values for each cell. When making an initial population,
+each grid is filled with random noise. For greater variety, the density of that
+noise (that is, what portion of the cells are alive) is also randomized.
 
+Examples of random starting frames in this configuration:
 ![Control example](output/genome_config_samples/control_0.gif)
 ![Control example](output/genome_config_samples/control_1.gif)
 ![Control example](output/genome_config_samples/control_2.gif)
@@ -86,15 +118,18 @@ populated with a range of different densities.
 ![Control example](output/genome_config_samples/control_5.gif)
 
 ### Tile
-Tile the game board with an 8x8 grid of cells, repeated and optionally
-mirrored. Although this searches a very limited subset of the phenotype space,
-working with a tiny 8x8 grid makes it relatively easy to evolve interesting
-cell patterns. Repeating that pattern many times is a quick way to amplify its
-effect and quickly find high-performing solutions to some fitness goals. This
-configuration also supports mirroring, which means every other instance of the
-tile is flipped, changing the ways tiles interact with each other along their
-edges.
+With this `GenomeConfig`, the genotype is interpreted as a small "stamp" (an
+8x8 grid of cells) of cells that gets repeated to fill the whole 64x64 game
+board. In this case, the stamp gets repeated edge-to-edge filling the entire
+board with no gaps or overlap. Optionally, every other copy of the tile may be
+mirrored, which allows for different interactions between copies of the stamp
+along its edges. Although this configuration narrows the search space to a very
+limited subset of possible GOL scenarios, working with a tiny stamp makes it
+relatively easy to randomly discover interesting cell patterns.  Repeating the
+stamp many times is a quick way to amplify its effect and quickly find
+high-performing solutions to some fitness goals.
 
+Examples of random starting frames in this configuration:
 ![Tile example](output/genome_config_samples/tile_0.gif)
 ![Tile example](output/genome_config_samples/tile_1.gif)
 ![Tile example](output/genome_config_samples/tile_2.gif)
@@ -103,12 +138,16 @@ edges.
 ![Tile example](output/genome_config_samples/tile_5.gif)
 
 ### Stamp
-Like Tile, except the algorithm has much more control over how the 8x8 grid of
-cells gets positioned and repeated. This has many of the same benefits of the
-Tile configuration, but greater flexibility. This means it can sometimes find
-better solutions, but it may take longer to find them since it’s searching a
-much larger space of possibility.
+Like Tile, except with much more flexibility in how the stamps get placed. Gaps
+and overlap between copies of the stamp are allowed. The stamp may be used
+once, twice, repeated in a line, or repeated in a grid like in the Tile
+configuration. This configuration has many of the same benefits of the Tile
+configuration, except it searches a larger space of possibilities. That means
+it might find better solutions that aren't reachable in the Tile configuration,
+but it may take longer to do so since it might look down more dead ends that
+Tile avoids.
 
+Examples of random starting frames in this configuration:
 ![Stamp example](output/genome_config_samples/stamp_0.gif)
 ![Stamp example](output/genome_config_samples/stamp_1.gif)
 ![Stamp example](output/genome_config_samples/stamp_2.gif)
@@ -121,6 +160,7 @@ All genes are randomly generated and allowed to evolve freely. In effect, this
 lets the algorithm choose between any of the above configurations and even
 switch between them from one generation to the next.
 
+Examples of random starting frames in this configuration:
 ![Freeform example](output/genome_config_samples/freeform_0.gif)
 ![Freeform example](output/genome_config_samples/freeform_1.gif)
 ![Freeform example](output/genome_config_samples/freeform_2.gif)
@@ -142,7 +182,7 @@ better.
 - **Full**: Maximize living cells in the last frame.
 - **Two cycle**: Maximize the number of cells oscillating between two states at
   the end of the simulation.
-- **Three cycle**: Maximize the nubmer of cells oscillating between three
+- **Three cycle**: Maximize the number of cells oscillating between three
   states at the end of the simulation.
 - **Left to right**: Start with the most living cells on the left and end with
   the most on the right.
@@ -151,15 +191,15 @@ better.
 
 ## Phase One
 This project has two phases of experimentation. The first phase serves to
-measure the performance of the genetic algorithm in all four of the predefined
-`GenomeConfigurations` against all four of the fitness goals. For each of those
+measure the performance of the genetic algorithm in all of the predefined
+`GenomeConfig`s against all four of the fitness goals. For each of those
 combinations, the algorithm will: 
-- Randomly generate a population of 32 genotypes (that's how many can run
-  simultaneously on the available GPU hardware). Each genotype consists of
-  a set of concrete values for each gene in the genome, constrained to the
-  current `GenomeConfiguration`.
-- Transform the genotype into a phenotype, which is the first frame of a GOL
-  simulation. The genotype is treated as a simple program which is evaluated to
+- Randomly generate a population of 32 `Genotype`s (that's how many can run
+  simultaneously on the available GPU hardware). Each `Genotype` consists of
+  a set of concrete values for each `Gene` in the genome, constrained to the
+  current `GenomeConfig`.
+- Transform the `Genotype` into a phenotype, which is the first frame of a GOL
+  simulation. The `Genotype` is treated as a simple program which is evaluated to
   create a phenotype, which is just an initial configuration of a GOL board
   like the ones [above](#genome-configurations).
 - Run every GOL simulation for 100 steps and evaluate their performance given
@@ -167,7 +207,7 @@ combinations, the algorithm will:
 - Randomly choose pairs of individuals from the population for breeding, in
   proportion to their fitness scores.
 - Produce a new population either by cloning one parent or by remixing the
-  genes from both parents (an operation known as crossover), then introducing a
+  `Gene`s from both parents (an operation known as crossover), then introducing a
   few random mutations into the offspring.
 - Repeat for 200 generations and graph the best fitness over time.
 - Record a video of the most fit GOL simulation from this configuration
@@ -179,18 +219,18 @@ times, and the results are averaged across those trials.
 ***TODO: Provide runtime stats***
 
 ## Phase Two
-Phase two abandons the default `GenomeConfigurations` and instead attempts to
+Phase two abandons the default `GenomeConfig`s and instead attempts to
 evolve one that will do better. This means exploring the possible initial
 values, crossover rates, and mutation rates. Importantly, mutation and
-crossover behavior can be configured per gene, not just globally for the whole
-genotype. This allows the algorithm to decide which genes benefit from a broad
+crossover behavior can be configured per `Gene`, not just globally for the whole
+`Genotype`. This allows the algorithm to decide which `Gene`s benefit from a broad
 search and which should be carefully preserved.
 
 Another goal of this project is to give the algorithm a meaningful way of
 steering its own evolution, taking historical performance into account. In
-phase two, this project uses a `FitnessVector` to indicates whether an
+phase two, this project uses a `FitnessVector` to indicate whether an
 individual's parent was more, less, or equally fit compared to its grandparent.
-Mutation and crossover values are be conditioned on this fitness vector. This
+Mutation and crossover values are conditioned on this fitness vector. This
 allows the algorithm to act to preserve valuable innovations or mitigate
 harmful regressions produced by mutation.
 
@@ -215,12 +255,12 @@ unreasonably lucky and outperformed all the rest. Sometimes the trials span a
 wide range of possibilities or even settle into a bimodal pattern, likely
 indicating that the algorithm settled into a local maximum.
 
-Below are some charts example fitness charts chosen to illustrate the variation
+Below are some example fitness charts chosen to illustrate the variation
 between trials (most experiments actually have less variation than this). Each
-one shows fitness data from five trials of 200 generations each. Note that
-as generations go by, fitness generally moves upward in spurts representing
-lucky mutations. It occassionally dips, indicating that by chance some
-important genes were lost from the gene pool.
+one shows fitness data from five trials of 200 generations each. Note that as
+generations go by, fitness generally moves upward in spurts representing lucky
+mutations. It occasionally dips, indicating that by chance some important genes
+were lost from the gene pool.
 
 ![One outlier](output/compare_phenotypes/left_to_right/freeform_fitness.png)
 ![Wide range](output/compare_phenotypes/still_life/tile_fitness.png)
@@ -255,7 +295,7 @@ wildly in each generation and there's no upward trajectory.
 ![No traction](output/compare_phenotypes/active/control_fitness.png)
 
 The Tile genome configuration does extremely well in some scenarios, but not
-others. This is because it has the most constrained set of genes, meaning it
+others. This is because it has the most constrained set of `Gene`s, meaning it
 searches over a smaller space of possibilities. If a good solution to the
 fitness goal lies in that space, it is likely to find it quickly. However, in
 some scenarios, it simply can't find a good solution by  filling all available
@@ -264,7 +304,7 @@ space with a repeated pattern.
 The Stamp configuration is very flexible and is often the best learner in the
 bunch. The Freeform configuration is, in theory, just as flexible, but it often
 gets stuck acting like Control rather than Stamp. That's because while Stamp is
-a much better learning, Control still does better in some scenarios where lots
+much better at learning, Control still does better in some scenarios where lots
 of randomness occasionally gets high fitness scores by luck alone.
 
 ## Fitness Goals
@@ -297,7 +337,7 @@ The Left to Right experiment is notable because different genome configurations
 found radically different strategies for getting a high fitness score. The
 Control configuration was able to use crossover to find a somewhat "cheaty"
 solution, where the left half of the board starts out overly dense (and thus
-dies out immediatley) while the right half has moderate density and produces
+dies out immediately) while the right half has moderate density and produces
 a lively cell population.
 
 The Stamp and Freeform configurations both found a strategy where a dense
@@ -330,7 +370,7 @@ it's very unlikely for that to happen symmetrically.
 | :-----: | :------: | :---: | :--: |
 | Control | Freeform | Stamp | Tile |
 
-### Two Cyle and Three Cycle
+### Two Cycle and Three Cycle
 For Two Cycle, both Tile and Stamp have a strong innate advantage. They can
 find small patterns that oscillate in the 8x8 stamp relatively easily, then
 repeat those patterns many times. The challenge for them is mostly how densely
@@ -407,11 +447,11 @@ reasons:
       the data in fruitful ways, do some post-processing to avoid obviously
       broken genotypes, or avoid clobbering or breaking up useful patterns that
       may have evolved in the genotype.
-    - This algorithm doesn’t use custom mutations, but achieves the same goal
-      using “latent genes.” Basically, some genes are used to choose between
-      different behaviors. For any given lifetime, those genes have a fixed
+    - This algorithm doesn't use custom mutations, but achieves the same goal
+      using “latent genes.” Basically, some `Gene`s are used to choose between
+      different behaviors. For any given lifetime, those `Gene`s have a fixed
       value, enabling some behaviors and disabling others. Between generations,
-      which genes are enabled can change via mutation, potentially swapping
+      which `Gene`s are enabled can change via mutation, potentially swapping
       one reasonable behavior for another. For example, mirroring a stamp is
       one way of introducing possibly fruitful variation while preserving
       existing patterns within the genome.
@@ -423,7 +463,7 @@ reasons:
       mate selection and managing the rate of mutations.
     - This algorithm leaves mate selection to the framework (this may change in
       [future work](#future-work)), but mutation is in control of the evolved
-      population. By finding different mutation rates for each gene, the
+      population. By finding different mutation rates for each `Gene`, the
       algorithm can bias its search to more fruitful parts of the search space.
       By using a [fitness vector](#phase-two), mutation and crossover rates can
       be tuned up or down depending on whether this genotype seems to be
@@ -431,34 +471,34 @@ reasons:
 
 # Biological Realism
 This project is inspired by two key observations about biological evolution:
-- Life doesn’t just evolve a program that determines the behavior of an
+- Life doesn't just evolve a program that determines the behavior of an
   organism. It also evolves a programming language and an interpreter for that
   language at the same time. In this way, life can find efficient and robust
   encodings for evolving programs that solve particular problems. In other
   words, each species has evolved a range of possible forms and behaviors, and
-  each individual lies somewhere in that space of possibility. Mutations are
+  each individual lies somewhere in that space of possibilities. Mutations are
   more likely to lead to other forms and behaviors that are still within that
   established space, which is generally supportive of the kind of niches and
   lifestyles available to that species.
 - Life plays an active role in its own evolution. Mutation rates are not
   controlled by the Universe, but are carefully managed by evolved mechanisms
   within the cell. In particular, there are a host of epigenetic processes that
-  allow mutation rates to change in response to experience, and this can happen
-  globally, regionally, or localized to a specific gene.
+  adjust mutation rates in response to experience, for the whole gene sequence,
+  for just a portion of it, or even for just a single gene.
 
 This project is designed to be as simple as possible while still capturing the
 spirit of those observations. It attempts to follow the same principles, but
 not in a way that is biologically plausible. There are many ways in which this
 project does not resemble real life, some of the most notable being:
 - **Two-tiered evolution**: Normally, the shape and behavior of the genome is
-  evolved along with the organism’s phenotype in a continuous process. That
-  wasn’t possible here, since the mechanism for managing the genome was not
+  evolved along with the organism's phenotype in a continuous process. That
+  wasn't possible here, since the mechanism for managing the genome was not
   evolved, but designed by the programmer. In nature, a process called
   “canalization” makes older, more fundamental genes more stable over time,
-  providing a reliable background for the mutation of other genes. That happens
+  providing a reliable background for the mutation of other `Gene`s. That happens
   automatically in evolution, but must be added in artificially for designed
   software. The nested evolutionary processes described [above](#phase-two) is
-  a naive attempt to do this, but it’s totally different from what life
+  a naive attempt to do this, but it's totally different from what life
   actually does.
 - **Organism isolation**: In this project, each individual organism exists
   within a single 64x64 GOL board, which serves both as its body and its
@@ -472,10 +512,10 @@ project does not resemble real life, some of the most notable being:
   management behaviors observed in real organisms. The concept of a “fitness
   vector” is inspired by stress-induced mutation factors. The information
   passed between generations is minimized to make it more biologically
-  plausible, but there’s no reason to think life actually does anything like
+  plausible, but there's no reason to think life actually does anything like
   this.
 - **Open-endedness**: This project gives the evolutionary process some
-  influence over the interpretation and variation of the genotype, but not
+  influence over the interpretation and variation of the `Genotype`, but not
   much. The range of possible options is still quite narrow, defined by the
   programmer, and unchangeable. In real life, the range of possibilities is
   itself evolved and plastic, but that was too complex to attempt in this
@@ -483,12 +523,12 @@ project does not resemble real life, some of the most notable being:
 
 # Design Considerations
 - **Domain Specialization**: Although this project uses the GOL as its problem
-  domain, the code for genotype and phenotype doesn’t have any GOL-specific
+  domain, the code for `Genotype` and phenotype doesn't have any GOL-specific
   logic. It should work just as well for generating any sort of 2D bitmap. This
   means it should work well for other cellular automata or for any problem
   where a phenotype can reasonably be described using a 2D bitmap.
 - **GPU Parallelization**: This program is written in Python, mostly because
-  it’s easy to read and write and good for rapid prototyping. It’s also
+  it's easy to read and write and good for rapid prototyping. It's also
   painfully slow to run. To work around this limitation, the inner loop of this
   program is highly optimized. It uses the Numba library to transpile Python
   code into C, which is then run on an NVIDIA GPU using the CUDA toolkit. This
@@ -500,21 +540,21 @@ project does not resemble real life, some of the most notable being:
   default, and full simulation videos of just the fittest organisms are
   recorded in a second pass.
 - **Genome Modeling**: This program has an explicit representation of the
-  organism genome, which includes all possible genes represented as high-level
+  organism genome, which includes all possible `Gene`s represented as high-level
   types (enums, integers, vectors, and arrays). This makes it relatively easy
-  and elegant to provide custom code for interpreting and varying the genotype
-  between generations without directly manipulating a string of bits, as many
-  genetic algorithms do. There is also an elaborate process for constraining a
-  genome with a configuration, and using that to instantiate a concrete
-  genotype for an individual GOL simulation. For more details on how this
-  works, check out the comments and doc strings in `genome.py`,
+  and elegant to provide custom code for interpreting and varying the
+  `Genotype` between generations without directly manipulating a string of
+  bits, as many genetic algorithms do. There is also an elaborate process for
+  constraining a genome with a configuration, and using that to instantiate a
+  concrete `Genotype` for an individual GOL simulation. For more details on how
+  this works, check out the comments and doc strings in `genome.py`,
   `genome_config.py`, and `gene_types.py`.
 - **Nestable Evolution**: This program runs several genetic algorithms, so
   it seemed natural to factor out some basic infrastructure for that purpose.
   In order to support the two-tiered genetic algorithm (see
   [above](#phase-two)), this infrastructure needed to support evolving
-  different kinds of individuals and even running an genetic algorithm
-  from within an genetic algorithm. This was achieved by letting the
+  different kinds of individuals and even running a genetic algorithm
+  from within a genetic algorithm. This was achieved by letting the
   caller create the initial population and do all the work of running and
   evaluating the fitness of each generation. The infrastructure is responsible
   only for selection, propagation, and bookkeeping.
@@ -522,21 +562,21 @@ project does not resemble real life, some of the most notable being:
   as intended required adding a basic debugger and a few unit and integration
   tests. The debugger allows the developer to inspect whole populations from
   generation to generation, and set breakpoints for major fitness changes and
-  particular breeding events in order to investigate them. The tests aren’t
+  particular breeding events in order to investigate them. The tests aren't
   meant to be exhaustive, but just to document behavior, provide basic sanity
   checks, and detect major regressions.
 
 # Future Work
 - **Open-endedness**: The genome and phenotype design for this project are as
   simple as they can be and still illustrate the effect of self-determination
-  on an genetic algorithm. The algorithm can influence its own design, but
+  on a genetic algorithm. The algorithm can influence its own design, but
   only within a very limited range defined by the programmer. In theory,
   defining the genome and phenotype in a much more flexible and open-ended way
   should produce more dramatic results. A v2 for this project is already in the
   works to explore this possibility.
-- **Other kinds of programs / RL**: While GOL scenarios are technically
-  "computer programs," they are about as simple as they come and not
-  practically usefuls. In theory, the principle behind this project could be
+- **Other kinds of programs / Reinforcement Learning**: While GOL scenarios are
+  technically "computer programs," they are about as simple as they come and
+  not practically useful. In theory, the principle behind this project could be
   useful for the evolved design of *any* program. In particular, this approach
   is likely well suited to the design of reinforcement learning agents, since
   in a sense that's what life uses it for.
@@ -546,8 +586,8 @@ project does not resemble real life, some of the most notable being:
   complexity, two things lacking from computer programs today. In addition,
   life is generally obsessed with sexual selection, which is a major tool for
   influencing the direction of evolution.
-- **More layers / DL**: This project is a two-layer intelligent system, very
-  loosely mimicking cells and bodies in biology. Nature frequently builds
-  intelligent systems with *many* layers, not just two. It would be interesting
-  to explore the evolution of more complex systems, especially ones that
-  integrate deep learning models with evolved programs.
+- **More layers / Deep Learning**: This project is a two-layer intelligent
+  system, very loosely mimicking cells and bodies in biology. Nature frequently
+  builds intelligent systems with *many* layers, not just two. It would be
+  interesting to explore the evolution of more complex systems, especially ones
+  that integrate deep learning models with evolved programs.
