@@ -190,6 +190,12 @@ def simulate(population, frames_to_capture):
                     simulation.capture_frame()
 
 
+def record_single_video(simulation, filename):
+    full_video = list(range(SIMULATION_RUN_LENGTH))
+    simulate([simulation], frames_to_capture=full_video)
+    simulation.save_video(filename)
+
+
 def record_videos(population, path):
     """Simulate the lives of population and save them as gif files.
 

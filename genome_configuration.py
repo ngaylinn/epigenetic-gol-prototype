@@ -52,7 +52,7 @@ class GeneConfig:
     valuable to allow a different strategy for exploring the possible values
     for each gene.
     """
-    def __init__(self, gene, fixed_value=None, sane_defaults=True):
+    def __init__(self, gene, fixed_value=None, static=False):
         """Construct a GeneConfig object.
 
         Parameters
@@ -62,17 +62,20 @@ class GeneConfig:
             will not be randomized or allowed to mutate.
         """
         self.gene = gene
-        if sane_defaults:
+        if static:
             self.fixed_value = fixed_value
             self.mutation_multiplier = [1.0, 1.0, 1.0]
         else:
             # At this point, we're randomizing the GeneConfig settings, but we
             # still want to respect fixed_value if it was specified.
-            if fixed_value:
+            if fixed_value is not None:
                 self.fixed_value = fixed_value
             else:
                 # If a fixed value wans't specified, maybe set one at random.
-                self.fixed_value = gene.randomize() if coin_flip() else None
+                # The probability 0.1 was chosen to be somewhat rare, but still
+                # common enough that a few of these show up in the initial
+                # population.
+                self.fixed_value = gene.randomize() if coin_flip(0.1) else None
             self.mutation_multiplier = []
             for _ in FitnessVector:
                 multiplier = random.random() * MAX_MULTIPLIER
@@ -170,7 +173,7 @@ class GenomeConfig(evolution.Evolvable):
     used for evolving GenomeConfigs and are never used when evolving
     GameOfLifeSimulations.
     """
-    def __init__(self, genome, fixed_values=None, sane_defaults=True):
+    def __init__(self, genome, fixed_values=None, static=False):
         """Construct a GenomeConfig object.
 
         genome : dict of str : Gene
@@ -196,8 +199,8 @@ class GenomeConfig(evolution.Evolvable):
             if fixed_values and gene_name in fixed_values:
                 fixed_value = fixed_values[gene_name]
             self.gene_configs[gene_name] = GeneConfig(
-                gene, fixed_value, sane_defaults)
-        if sane_defaults:
+                gene, fixed_value, static)
+        if static:
             self.global_mutation_rate = [DEFAULT_MUTATION_RATE] * 3
             self.global_crossover_rate = [DEFAULT_CROSSOVER_RATE] * 3
         else:
@@ -207,6 +210,10 @@ class GenomeConfig(evolution.Evolvable):
                 mutation_rate = random.random() * MAX_MUTATION_RATE
                 self.global_mutation_rate.append(mutation_rate)
                 self.global_crossover_rate.append(random.random())
+
+    @classmethod
+    def make_static(cls, genome, fixed_values=None):
+        return cls(genome, fixed_values=fixed_values, static=True)
 
     def initialize_genotype_data(self, data):
         """Set appropriate randomized values for all Genes in a Genotype.

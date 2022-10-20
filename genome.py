@@ -68,16 +68,16 @@ GENOME_DTYPE = np.dtype(
 EXPERIMENT_CONFIGS = {
     # A baseline GenomeConfig that builds the phenotype directly from a
     # 64x64 grid of bits without further elaboration.
-    'control': GenomeConfig(GENOME, {
+    'control': GenomeConfig.make_static(GENOME, {
         'stamp': False}),
-    'tile': GenomeConfig(GENOME, {
+    'tile': GenomeConfig.make_static(GENOME, {
         'stamp': True,
         'stamp_offset': (0, 0),
         'repeat_mode': kernel.REPEAT_2D,
         'repeat_offset': kernel.STAMP_SHAPE}),
-    'stamp': GenomeConfig(GENOME, {
+    'stamp': GenomeConfig.make_static(GENOME, {
         'stamp': True}),
-    'freeform': GenomeConfig(GENOME)
+    'freeform': GenomeConfig.make_static(GENOME)
 }
 
 

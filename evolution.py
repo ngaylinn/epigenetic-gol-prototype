@@ -1,4 +1,4 @@
-"""Infrastructure to run and collect data from a genetic algorithm experiment.
+"""Infrastructure to run and collect data from a genetic algorithm exinspectiment.
 
 The purpose of this module is to separate the basic setup and state tracking
 needed to run any genetic algorithm from the behavior of some specific genetic
@@ -39,16 +39,16 @@ def select(population, count):
         return random.sample(population, count)
     # Pick count equidistant sampling points around the edge of that
     # roulette wheel, starting at a random location.
-    sample_period = total_fitness / count
-    sample_offset = random.random() * sample_period
-    samples = [sample_offset + i * sample_period for i in range(count)]
+    sample_inspectiod = total_fitness / count
+    sample_offset = random.random() * sample_inspectiod
+    samples = [sample_offset + i * sample_inspectiod for i in range(count)]
 
     # Walk around the edge of the roulette wheel to figure out which wedge
     # contains each sample point. The individual corresponding to that wedge /
     # sample point will be selected. More fit individuals have bigger wedges
     # which may contain multiple sample points, which means that individual
     # gets selected more than once and can have multiple offspring. Individuals
-    # with a fitness score smaller than the sample_period may fall between
+    # with a fitness score smaller than the sample_inspectiod may fall between
     # sample points and fail to get selected and pass on their genes.
     result = []
     # An index into population / the wedges in the roulette wheel. Starting at
@@ -69,16 +69,7 @@ def select(population, count):
     return result
 
 
-# Each Evolvable gets a tracking id, and this is a helper for generating
-# sequential numbers for those ids.
-def _get_id_generator():
-    next_id = 0
-    while True:
-        yield next_id
-        next_id += 1
-
-
-_id_generators = {}
+next_ids = {}
 
 
 @total_ordering  # Sortable by fitness.
@@ -89,21 +80,18 @@ class Evolvable:
     individual in a genetic algorithm, and provide an interface to Lineage.
 
     To subclass Evolvable, you must:
-    - Call super().__init__ with an id prefix representing your subclass.
+    - Call suinspect().__init__ with an id prefix representing your subclass.
       Each individual will be assigned a unique id with that prefix.
     - Provide implementations of should_crossover and make_offspring.
     - Make sure to set fitness appropriately when implementing
       Lineage.evaluate_population.
     """
     def __init__(self, id_prefix):
-        id_number = next(_id_generators.setdefault(
-            id_prefix, _get_id_generator()))
+        id_number = next_ids.setdefault(id_prefix, 0)
+        next_ids[id_prefix] = id_number + 1
         self.identifier = f'{id_prefix}{id_number:08d}'
         # To be set by subclasses
         self.fitness = None
-        # Used by the debugger to visualize reproduction events.
-        self.num_parents = 0
-        self.num_children = 0
 
     def should_crossover(self):
         """Return true iff the make_offspring should use crossover.
@@ -123,7 +111,7 @@ class Evolvable:
         """Produce a new Evolvable using genes from self and possibly mate.
 
         The implementation for this method should apply both mutation and
-        crossover. Traditionally, crossover is an operation that takes two
+        crossover. Traditionally, crossover is an oinspectation that takes two
         genotypes and returns two genotypes, guaranteeing that all genes from
         both parents are present in the next generation. This project produces
         each offspring independently, which is more biologically realistic but
@@ -136,7 +124,7 @@ class Evolvable:
             Another individual from the same population that has been selected
             as a mate for this breeding. Note that if mate is provided, that
             means should_crossover returned True and crossover should be
-            performed if applicable.
+            inspectformed if applicable.
 
         Returns
         -------
@@ -153,7 +141,7 @@ class Evolvable:
 
 
 class Lineage:
-    """Evolve an experimental population and capture statistics.
+    """Evolve an exinspectimental population and capture statistics.
 
     This class handles the basic book keeping and statistics tracking of a
     genetic algorithm. To use it, make a subclass and implement
@@ -170,11 +158,17 @@ class Lineage:
     """
     def __init__(self):
         self.fitness_by_generation = []
+        self.generation = 0
+        self.population = None
         self.best_individual = None
         self.best_individual_by_generation = []
         # Hooks for the debugger to override. By default, they do nothing.
-        self.per_generation_callback = lambda generation, population: None
-        self.per_breeding_callback = lambda gen, parent, mate, child: None
+        self.inspect_generation_callback = lambda generation, population: None
+        self.inspect_breeding_callback = lambda gen, parent, mate, child: None
+
+    def __get_state__(self):
+        return {key: self.__dict__[key]
+                for key in self.__dict__.keys() if 'callback' not in key}
 
     def make_initial_population(self):
         """Return a list of Evolvables to serve as the seed population.
@@ -191,7 +185,7 @@ class Lineage:
 
         When implementing this function, run the full life cycle of each
         individual in population and set individual.fitness to reflect their
-        performance.
+        inspectformance.
 
         Parameters
         ----------
@@ -217,23 +211,55 @@ class Lineage:
         self.fitness_by_generation.append(best_of_generation.fitness)
         self.best_individual = max(best_of_generation, self.best_individual)
 
+    # TODO: Refactor this to use a callback instead of a while loop.
+    def step_evolution(self, num_generations):
+        """Run the evolution of this lineage forward by one step.
+
+        This method exists to help with checkpointing in the exinspectiments
+        module. Since evolving a lineage for many generations can take a while
+        (especially a GenomeLineage), it's helpful to pause midway to save a
+        checkpoint. This method tracks the current generation and population on
+        this Lineage object so that evolution can resume even after the object
+        has been serialized and deserialized.
+
+        Parameters
+        ----------
+        num_generations : int
+            The number of iterations to evolve this lineage for.
+
+        Returns
+        -------
+        bool
+            True iff the last generation has been completed.
+        """
+        if self.generation == 0:
+            # Defer to the subclass to supply the initial population.
+            self.population = self.make_initial_population()
+        self.run_generation(self.population)
+        # Breed the next generation, unless this is the last one.
+        if self.generation + 1 < num_generations:
+            next_population = self.propagate(self.generation, self.population)
+        # Call the callback with the current population, but only after
+        # computing the next population. This way, the debugger can be aware of
+        # any children the current population produced.
+        self.inspect_generation_callback(self.generation, self.population)
+        self.generation += 1
+        if self.generation < num_generations:
+            self.population = next_population
+            return True
+        return False
+
     def evolve(self, num_generations):
         """Evolve this lineage for the desired number of generations.
 
         Parameters
         ----------
         num_generations : int
-            The number of iterations of the main loop of the genetic algorithm.
+            The number of iterations to evolve this lineage for.
         """
-        # Defer to the subclass to supply the initial population.
-        population = self.make_initial_population()
-        for generation in range(num_generations):
-            self.run_generation(population)
-            # Breed the next generation, unless this is the last one.
-            if generation + 1 < num_generations:
-                next_population = self.propagate(generation, population)
-            self.per_generation_callback(generation, population)
-            population = next_population
+        self.generation = 0
+        while self.step_evolution(num_generations):
+            pass
 
     def propagate(self, generation, population):
         """Make a new population via selection and reproduction.
@@ -265,6 +291,6 @@ class Lineage:
             if mate is parent or not parent.should_crossover():
                 mate = None
             child = parent.make_offspring(mate)
-            self.per_breeding_callback(generation, parent, mate, child)
+            self.inspect_breeding_callback(generation, parent, mate, child)
             new_population.append(child)
         return new_population

@@ -28,6 +28,7 @@ import numpy as np
 
 import experiments
 import genome
+import genome_configuration
 import gol_simulation
 
 
@@ -56,27 +57,28 @@ def genome_config_samples():
             simulation.save_video(f'{path}/{genome_name}_{index}.gif')
 
 
+def trials_summary(trial_series, title):
+    # Generate a chart of all trials in this configuration.
+    fig = plt.figure()
+    fig.suptitle(title)
+    axis = fig.add_subplot()
+    generations = list(range(experiments.NUM_SIMULATION_GENERATIONS))
+    for trial_index, data_series in enumerate(trial_series):
+        axis.plot(generations, data_series, label=f'Trial {trial_index + 1}')
+    axis.legend()
+    return fig
+
+
 def compare_phenotypes():
     """Compare the performance of genome configurations on fitness goals."""
     path = 'output/compare_phenotypes'
     os.makedirs(path, exist_ok=True)
-    pickle_filename = f'{path}/experiment_data.pickle'
-    experiment_data = {}
-    if os.path.exists(pickle_filename):
-        print('Loading cached experiment data.')
-        with open(pickle_filename, 'rb') as file:
-            experiment_data = pickle.load(file)
-    else:
-        experiment_data, sample_simulations = experiments.compare_phenotypes()
-        videos_path = f'{path}/simulation_videos'
-        os.makedirs(videos_path, exist_ok=True)
-        gol_simulation.record_videos(sample_simulations, videos_path)
-        with open(pickle_filename, 'wb') as file:
-            pickle.dump(experiment_data, file)
 
     generations = list(range(experiments.NUM_SIMULATION_GENERATIONS))
 
-    for fitness_name, fitness_data in experiment_data.items():
+    study = experiments.compare_phenotypes_study
+
+    for fitness_name, more_experiments in study.items():
         os.makedirs(f'{path}/{fitness_name}', exist_ok=True)
 
         fitness_summary_fig = plt.figure(figsize=(6, 3))
@@ -85,28 +87,30 @@ def compare_phenotypes():
         regression_axis = fitness_summary_fig.add_subplot(1, 2, 1)
         regression_axis.set_title('Median Fitness Trajectory')
 
-        for genome_name, genome_data in fitness_data.items():
-            trial_series = genome_data['trials']
-            best_id = genome_data['best_id']
+        #sample_simulations = []
+        max_fitness_by_genome = []
+        genome_names = []
 
-            # Add symbolic links from the trial data to simulation videos.
-            target_name = f'../simulation_videos/{best_id}_run.gif'
-            link_name = f'{path}/{fitness_name}/{genome_name}_best.gif'
-            if os.path.exists(link_name):
-                os.remove(link_name)
-            os.symlink(target_name, link_name)
+        for genome_name, run_experiment in more_experiments.items():
+            print(f'Compare Phenotypes ({fitness_name} x {genome_name})')
+            state_filename = f'{path}/{fitness_name}/{genome_name}_state.pickle'
+            data = run_experiment(state_filename)
+            #sample_simulations.extend(data['sample_simulations'])
+            trial_series = data['trial_series']
+            best_simulation = data['best_simulation']
 
-            # Generate a chart of all trials in this configuration.
-            trials_fig = plt.figure()
-            trials_fig.suptitle(
-                f'{make_title(fitness_name)} x {make_title(genome_name)}')
-            axis = trials_fig.add_subplot()
-            for trial_index, data_series in enumerate(trial_series):
-                axis.plot(generations, data_series,
-                          label=f'Trial {trial_index + 1}')
-            axis.legend()
-            trials_fig.savefig(
+            gol_simulation.record_single_video(
+                best_simulation,
+                f'{path}/{fitness_name}/{genome_name}_best.gif')
+
+            # Generate a chart showing the fitness trajectory across all the
+            # trials in this experiment.
+            trials_summary(
+                trial_series,
+                f'{make_title(fitness_name)} x {make_title(genome_name)}'
+            ).savefig(
                 f'{path}/{fitness_name}/{genome_name}_fitness.png')
+            genome_names.append(genome_name)
 
             # Generate a chart comparing median fitness trajectories
             median_fitness_series = list(
@@ -120,48 +124,125 @@ def compare_phenotypes():
                 label=make_title(genome_name))
             regression_axis.legend()
 
+            # For each genome_config, track the max fitness it achieved across
+            # all trials and its name for the aggregate box plot below.
+            max_fitness_by_genome.append(list(map(max, trial_series)))
+
         # Generate a boxplot summarizing max fitness across trials.
-        max_fitness = [
-            list(map(max, genome_data['trials'])) for genome_data in
-            fitness_data.values()]
         fitness_axis = fitness_summary_fig.add_subplot(1, 2, 2)
         fitness_axis.set_title('Best Fitness Across Trials')
-        labels = [make_title(name) for name in fitness_data.keys()]
-        fitness_axis.boxplot(max_fitness, labels=labels)
+        labels = [make_title(name) for name in genome_names]
+        fitness_axis.boxplot(max_fitness_by_genome, labels=labels)
         fitness_summary_fig.savefig(f'{path}/{fitness_name}/summary.png')
         plt.close('all')
 
 
-def evolve_genome_configuration(sane_defaults, genome_fitness_func):
-    func_name = make_title(genome_fitness_func.__name__)
-    path = f'output/evolve_genome_configuration/{sane_defaults} x {func_name}'
-    os.makedirs(path, exist_ok=True)
-    pickle_filename = f'{path}/experiment_data.pickle'
-    experiment_data = {}
-    if os.path.exists(pickle_filename):
-        print('Loading previous trial data.')
-        with open(pickle_filename, 'rb') as file:
-            experiment_data = pickle.load(file)
-    else:
-        result = experiments.evolve_genome_config(
-            sane_defaults, genome_fitness_func)
-        experiment_data, best_genome_config, best_simulation = result
-        videos_path = f'{path}/simulation_videos'
-        os.makedirs(videos_path, exist_ok=True)
-        gol_simulation.record_videos([best_simulation], videos_path)
-        with open(pickle_filename, 'wb') as file:
-            pickle.dump(experiment_data, file)
-        with open(f'{path}/best_genome_config.pickle', 'wb') as file:
-            pickle.dump(best_genome_config, file)
+def visualize_genome_config(genome_config):
+    def format_floats(values):
+        return [f'{value:0.4f}' for value in values]
 
-    generations = list(range(experiments.NUM_GENOME_GENERATIONS))
-    fig = plt.figure()
-    for fitness_name, fitness_series in experiment_data.items():
-        axis = fig.add_subplot()
-        axis.plot(generations, fitness_series, label=make_title(fitness_name))
-        axis.legend()
-    fig.savefig(f'{path}/summary.png')
-    plt.close('all')
+    def get_color(value, baseline, max_value):
+        # 0 is a special value, indicating a fixed gene (static)
+        if value == 0.0:
+            return (0, 0, 0, 1)
+        # If the value is smaller than the baseline, show it on a gray scale
+        # going from white (baseline) to black (static)
+        if value <= baseline:
+            return plt.cm.binary(1 - value / baseline)
+        # If the value is greater than the baseline, show it on a scale going
+        # from white (baseline) to deep blue (max value)
+        return plt.cm.Blues(value / max_value)
+
+    def get_colors(values, baseline, max_value):
+        return [get_color(value, baseline, max_value) for value in values]
+
+    global_mutation_rate = genome_config.global_mutation_rate
+    global_crossover_rate = genome_config.global_crossover_rate
+    gene_mutation_rates = {}
+    for gene_name, gene_config in genome_config.gene_configs.items():
+        gene_mutation_rates[gene_name] = [
+            gene_config.mutation_rate(vector, global_mutation_rate[vector])
+            for vector in genome_configuration.FitnessVector]
+    text = []
+    colors = []
+    text.append(format_floats(global_mutation_rate))
+    colors.append(get_colors(global_mutation_rate,
+                             genome_configuration.DEFAULT_MUTATION_RATE,
+                             genome_configuration.MAX_MUTATION_RATE))
+    text.append(format_floats(global_crossover_rate))
+    colors.append(get_colors(global_crossover_rate,
+                             genome_configuration.DEFAULT_CROSSOVER_RATE,
+                             1))
+    short_names = {
+        'seed': 'Seed',
+        'stamp': 'Stamp',
+        'stamp_offset': 'StpOff',
+        'repeat_mode': 'RptMod',
+        'repeat_offset': 'RptOff',
+        'mirror': 'Mirror'
+    }
+    row_labels = ['GlbMut', 'GlbCxr']
+    for gene_name, gene_config in genome_config.gene_configs.items():
+        mutation_rates = gene_mutation_rates[gene_name]
+        text.append(format_floats(mutation_rates))
+        colors.append(get_colors(mutation_rates,
+                                 genome_configuration.DEFAULT_MUTATION_RATE,
+                                 genome_configuration.MAX_MUTATION_RATE))
+        row_labels.append(short_names[gene_name])
+    fig, axis = plt.subplots()
+    fig.patch.set_visible(False)
+    axis.axis('off')
+    axis.axis('tight')
+    axis.table(cellText=text,
+               cellColours=colors,
+               rowLabels=row_labels,
+               colLabels=['▼', '=', '▲'],
+               colWidths=[.1, .1, .1],
+               loc='center')
+    fig.tight_layout()
+    return fig
+
+
+def evolve_genome_configuration():
+    path = 'output/evolve_genome_configuration'
+    os.makedirs(path, exist_ok=True)
+
+    study = experiments.evolve_genome_study
+    for fitness_name, more_experiments in study.items():
+        os.makedirs(f'{path}/{fitness_name}', exist_ok=True)
+        for genome_fitness_name, run_experiment in more_experiments.items():
+            print(f'Evolve GenomeConfig ({fitness_name} x {genome_fitness_name})')
+            state_filename = f'{path}/{fitness_name}/{genome_fitness_name}_state.pickle'
+            data = run_experiment(state_filename)
+            #sample_simulations = data['sample_simulations']
+            fitness_series = data['fitness_series']
+            best_genome_config = data['best_config']
+            trial_series = data['best_trials']
+            best_simulation = data['best_simulation']
+
+            os.makedirs(f'{path}/{fitness_name}', exist_ok=True)
+            generations = list(range(experiments.NUM_GENOME_GENERATIONS))
+            fig = plt.figure()
+            axis = fig.add_subplot()
+            axis.plot(generations, fitness_series,
+                      label=make_title(fitness_name))
+            axis.legend()
+            fig.savefig(f'{path}/{fitness_name}/{genome_fitness_name}_summary.png')
+
+            pickle_filename = f'{path}/{fitness_name}/{genome_fitness_name}_best.pickle'
+            with open(pickle_filename, 'wb') as file:
+                pickle.dump(best_genome_config, file)
+            visualize_genome_config(best_genome_config).savefig(
+                f'{path}/{fitness_name}/{genome_fitness_name}_best.png')
+
+            trials_summary(
+                trial_series, f'{make_title(fitness_name)}'
+            ).savefig(f'{path}/{fitness_name}/{genome_fitness_name}_best_trials.png')
+
+            gol_simulation.record_single_video(
+                best_simulation,
+                f'{path}/{fitness_name}/{genome_fitness_name}_best_sim.gif')
+            plt.close('all')
 
 
 def main():
@@ -181,10 +262,7 @@ def main():
     # predefined genome configurations on all the fitness goals.
     # TODO: Re-enable
     # compare_phenotypes()
-    # TODO: Figure out the phase two experiments.
-    for sane_defaults in (True, False):
-        for genome_fitness_func in experiments.GENOME_FITNESS_FUNCTIONS:
-            evolve_genome_configuration(sane_defaults, genome_fitness_func)
+    evolve_genome_configuration()
 
 
 if __name__ == '__main__':
