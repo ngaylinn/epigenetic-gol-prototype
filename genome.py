@@ -15,7 +15,7 @@ GenomeConfigs.
 import numpy as np
 
 import gene_types
-from genome_configuration import GenomeConfig, GeneConfig, FitnessVector
+from genome_configuration import GenomeConfig, FitnessVector
 import kernel
 from utility import coin_flip
 
@@ -65,7 +65,7 @@ GENOME_DTYPE = np.dtype(
 
 # A collection of predefined GenomeConfigs to use for these experiments, keyed
 # by name.
-EXPERIMENT_CONFIGS = {
+PREDEFINED_CONFIGS = {
     # A baseline GenomeConfig that builds the phenotype directly from a
     # 64x64 grid of bits without further elaboration.
     'control': GenomeConfig.make_static(GENOME, {
@@ -98,7 +98,7 @@ class Genotype:
         genome_config : GenomeConfig
             The GenomeConfig that determines how to make this Genotype from the
             GENOME. This can be one of the pre-defined options from
-            EXPERIMENT_CONFIGS above, or an evolved value.
+            PREDEFINED_CONFIGS above, or an evolved value.
         data : np.ndarray of GENOME_DTYPE, optional
             The backing data for this Genotype. When making a Genotype from
             scratch, this is None and data is randomly generated. When a new

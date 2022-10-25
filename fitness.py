@@ -1,7 +1,7 @@
 """Fitness evaluation functions and related utilities.
 
 This module provides several predefined fitness goals for use with the
-GameOfLifeSimulation class in the EXPERIMENT_GOALS dictionary. Each goal is a
+GameOfLifeSimulation class in the ALL_GOALS dictionary. Each goal is a
 function that takes a GameOfLifeSimulation and returns a fitness score. This
 score is an integer with an arbitrary scale that is meant for comparing
 relative performance on a single goal, but not comparing performance between
@@ -19,7 +19,7 @@ import kernel
 # values are corresponding functions that take a GameOfLifeSimulation video as
 # their parameter and return an integer fitness score. This is populated when
 # this module is loaded via the fitness_goal decorator.
-EXPERIMENT_GOALS = {}
+ALL_GOALS = {}
 
 
 def get_frames_needed(fitness_function):
@@ -51,7 +51,7 @@ def evaluate_simulation(fitness_function, simulation):
 
     This function serves as an adapter from a GameOfLifeSimulation to just the
     simulation video frames needed by one of the below fitness functions. You
-    probably have no need to call this function directly. The EXPERIMENT_GOALS
+    probably have no need to call this function directly. The ALL_GOALS
     dictionary is more convenient, and its values are just instances of this
     function with the first argument bound to the appropriate fitness function
     for each key / fitness goal name.
@@ -99,13 +99,13 @@ def fitness_goal(frames_needed):
     def decorator(fitness_function):
         # The name of the function being wrapped is used as its identifier when
         # analyzing or outputing experiment results. It's also the key for
-        # looking up this fitness_function in EXPERIMENT_GOALS.
+        # looking up this fitness_function in ALL_GOALS.
         goal_name = fitness_function.__name__
         # Wrap the fitness function using the evaluate_simulation function to
         # provide a convenient interface to callers.
         wrapped_function = functools.partial(
             evaluate_simulation, fitness_function)
-        EXPERIMENT_GOALS[goal_name] = wrapped_function
+        ALL_GOALS[goal_name] = wrapped_function
         # Track the frames needed list by attaching it to the function. This
         # seemed simpler than creating a parallel global dict for metadata.
         # Attach it both to the wrapped and unwrapped versions, so that
