@@ -1,4 +1,4 @@
-"""Infrastructure to run and collect data from a genetic algorithm exinspectiment.
+"""Infrastructure to run and collect data from a genetic algorithm experiment.
 
 The purpose of this module is to separate the basic setup and state tracking
 needed to run any genetic algorithm from the behavior of some specific genetic
@@ -39,16 +39,16 @@ def select(population, count):
         return random.sample(population, count)
     # Pick count equidistant sampling points around the edge of that
     # roulette wheel, starting at a random location.
-    sample_inspectiod = total_fitness / count
-    sample_offset = random.random() * sample_inspectiod
-    samples = [sample_offset + i * sample_inspectiod for i in range(count)]
+    sample_period = total_fitness / count
+    sample_offset = random.random() * sample_period
+    samples = [sample_offset + i * sample_period for i in range(count)]
 
     # Walk around the edge of the roulette wheel to figure out which wedge
     # contains each sample point. The individual corresponding to that wedge /
     # sample point will be selected. More fit individuals have bigger wedges
     # which may contain multiple sample points, which means that individual
     # gets selected more than once and can have multiple offspring. Individuals
-    # with a fitness score smaller than the sample_inspectiod may fall between
+    # with a fitness score smaller than the sample_period may fall between
     # sample points and fail to get selected and pass on their genes.
     result = []
     # An index into population / the wedges in the roulette wheel. Starting at
@@ -80,7 +80,7 @@ class Evolvable:
     individual in a genetic algorithm, and provide an interface to Lineage.
 
     To subclass Evolvable, you must:
-    - Call suinspect().__init__ with an id prefix representing your subclass.
+    - Call super().__init__ with an id prefix representing your subclass.
       Each individual will be assigned a unique id with that prefix.
     - Provide implementations of should_crossover and make_offspring.
     - Make sure to set fitness appropriately when implementing
@@ -111,7 +111,7 @@ class Evolvable:
         """Produce a new Evolvable using genes from self and possibly mate.
 
         The implementation for this method should apply both mutation and
-        crossover. Traditionally, crossover is an oinspectation that takes two
+        crossover. Traditionally, crossover is an operation that takes two
         genotypes and returns two genotypes, guaranteeing that all genes from
         both parents are present in the next generation. This project produces
         each offspring independently, which is more biologically realistic but
@@ -124,7 +124,7 @@ class Evolvable:
             Another individual from the same population that has been selected
             as a mate for this breeding. Note that if mate is provided, that
             means should_crossover returned True and crossover should be
-            inspectformed if applicable.
+            performed if applicable.
 
         Returns
         -------
@@ -141,7 +141,7 @@ class Evolvable:
 
 
 class Lineage:
-    """Evolve an exinspectimental population and capture statistics.
+    """Evolve an experimental population and capture statistics.
 
     This class handles the basic book keeping and statistics tracking of a
     genetic algorithm. To use it, make a subclass and implement
@@ -153,22 +153,32 @@ class Lineage:
         A list with the maximum fitness score from each generation.
     best_individual : Evolvable
         The single most fit individual found across all generations.
-    best_individual_by_generation : list of Evolvable
-        A list of the best individual from each generation.
     """
     def __init__(self):
         self.fitness_by_generation = []
         self.generation = 0
         self.population = None
         self.best_individual = None
-        self.best_individual_by_generation = []
         # Hooks for the debugger to override. By default, they do nothing.
         self.inspect_generation_callback = lambda generation, population: None
         self.inspect_breeding_callback = lambda gen, parent, mate, child: None
 
-    def __get_state__(self):
-        return {key: self.__dict__[key]
-                for key in self.__dict__.keys() if 'callback' not in key}
+    def __getstate__(self):
+        # Filter out any callback functions when pickling a Lineage or any
+        # Lineage subclass. Conceptually, callbacks aren't serializable,
+        # they're part of how serializable data objects connect with a running
+        # process. Practically speaking, pickle chokes on locally defined
+        # lambdas as well as the progress bar library used in the experiments
+        # module, so filtering them out is necessary.
+        return {key: value
+                for key, value in self.__dict__.items()
+                if 'callback' not in key}
+
+    def __setstate__(self, state):
+        # Restore dummy callbacks so we can call them without checking for
+        # their presence.
+        self.inspect_generation_callback = lambda generation, population: None
+        self.inspect_breeding_callback = lambda gen, parent, mate, child: None
 
     def make_initial_population(self):
         """Return a list of Evolvables to serve as the seed population.
@@ -185,7 +195,7 @@ class Lineage:
 
         When implementing this function, run the full life cycle of each
         individual in population and set individual.fitness to reflect their
-        inspectformance.
+        performance.
 
         Parameters
         ----------
@@ -207,20 +217,18 @@ class Lineage:
         self.evaluate_population(population)
         # Update our book keeping of individuals with the best fitness score.
         best_of_generation = max(population)
-        self.best_individual_by_generation.append(best_of_generation)
         self.fitness_by_generation.append(best_of_generation.fitness)
         self.best_individual = max(best_of_generation, self.best_individual)
 
-    # TODO: Refactor this to use a callback instead of a while loop.
     def step_evolution(self, num_generations):
         """Run the evolution of this lineage forward by one step.
 
-        This method exists to help with checkpointing in the exinspectiments
-        module. Since evolving a lineage for many generations can take a while
-        (especially a GenomeLineage), it's helpful to pause midway to save a
-        checkpoint. This method tracks the current generation and population on
-        this Lineage object so that evolution can resume even after the object
-        has been serialized and deserialized.
+        This method exists in order to support the pause / resume functionality
+        in the experiments module. It makes it possible to interrupt evolution
+        after each cycle, and to pick back up where we left off. This method
+        tracks the current generation and population on this Lineage object so
+        that the full state of this process can be serialized and deserialized
+        with the Lineage object.
 
         Parameters
         ----------

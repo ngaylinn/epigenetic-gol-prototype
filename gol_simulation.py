@@ -26,8 +26,10 @@ import evolution
 import kernel
 
 
-# The number of frames to run every Game of Life simulation.
+# The number of frames to run every GameOfLifeSimulations.
 SIMULATION_RUN_LENGTH = 100
+# The frames needed to record a full GameOfLifeSimulation video.
+FULL_VIDEO = list(range(SIMULATION_RUN_LENGTH))
 # When exporting a simulation video, scale it up by this much to make it
 # easier to see.
 IMAGE_SCALE_FACTOR = 2
@@ -191,8 +193,13 @@ def simulate(population, frames_to_capture):
 
 
 def record_single_video(simulation, filename):
-    full_video = list(range(SIMULATION_RUN_LENGTH))
-    simulate([simulation], frames_to_capture=full_video)
+    """Simluate and save a gif of the lifetime for one GameOfLifeSimulation.
+
+    This function is much less efficient than recording a batch of videos using
+    record_videos. It's useful for producing incremental output instead of
+    waiting to accumulate a bunch of simulations before saving them.
+    """
+    simulate([simulation], frames_to_capture=FULL_VIDEO)
     simulation.save_video(filename)
 
 
@@ -211,14 +218,9 @@ def record_videos(population, path):
     path : str
         The file system path where all the videos should be saved. This path is
         assumed to exist. All gif files are saved with the simulation
-        identifier (managed by Evolvable) and the suffix "_run" to distinguish
-        it from any other per-simulation data that might be saved.
+        identifier (managed by Evolvable) as a name.
     """
-    print(f'Recording full simulations for {len(population)}'
-          ' sample individuals...')
-    full_video = list(range(SIMULATION_RUN_LENGTH))
-    simulate(population, frames_to_capture=full_video)
+    simulate(population, frames_to_capture=FULL_VIDEO)
     for simulation in population:
-        filename = f'{path}/{simulation.identifier}_run.gif'
+        filename = f'{path}/{simulation.identifier}.gif'
         simulation.save_video(filename)
-    print('All files saved.')

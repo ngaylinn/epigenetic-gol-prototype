@@ -68,9 +68,10 @@ class GeneConfig:
         else:
             # At this point, we're randomizing the GeneConfig settings, but we
             # still want to respect fixed_value if it was specified.
-            if fixed_value is not None:
-                self.fixed_value = fixed_value
-            else:
+            self.fixed_value = fixed_value
+            # Don't use fixed values for really big compound genes, since
+            # fixing values mostly only makes sense for configuration genes.
+            if fixed_value is None and gene.num_values() <= 2:
                 # If a fixed value wans't specified, maybe set one at random.
                 # The probability 0.1 was chosen to be somewhat rare, but still
                 # common enough that a few of these show up in the initial
@@ -82,8 +83,15 @@ class GeneConfig:
                 self.mutation_multiplier.append(multiplier)
 
     def copy(self):
+        """Make a copy of a GeneConfig, with its own copy of the data."""
+        # It's safe to pass fixed_value by reference, since it is never
+        # modified in place. It's safe to leave out the static parameter to the
+        # constructor because this method is only called when static is False
+        # (that is, for breeding new GenomeConfigs)
         result = GeneConfig(self.gene, self.fixed_value)
-        result.mutation_multiplier = self.mutation_multiplier
+        # Make a copy of the mutation_multiplier list, so mutations in the
+        # child won't modify the data in the parent.
+        result.mutation_multiplier = self.mutation_multiplier.copy()
         return result
 
     def mutation_rate(self, fitness_vector, global_rate):
@@ -173,7 +181,8 @@ class GenomeConfig(evolution.Evolvable):
     used for evolving GenomeConfigs and are never used when evolving
     GameOfLifeSimulations.
     """
-    def __init__(self, genome, fixed_values=None, static=False):
+    def __init__(self, genome, fixed_values=None, static=False,
+                 use_fitness_vector=True, use_per_gene_config=True):
         """Construct a GenomeConfig object.
 
         genome : dict of str : Gene
@@ -182,14 +191,26 @@ class GenomeConfig(evolution.Evolvable):
             A dictionary mapping from gene name to a fixed value to use for
             that gene. If a fixed value is not specified for a gene, it will be
             randomized instead.
-        sane_defaults: bool
-            Whether or not to start with known good default values for
-            configuration or to set them randomly. This should be set to True
-            for manually specified GenomeConfigs for reliability. When evolving
-            a GenomeConfig, setting it to False allows for a broader search.
+        static : bool
+            True iff this GenomeConfig will not be evolved, indicating that
+            attributes should be set to sensible defaults rather. Otherwise,
+            randomize attributes to make a diverse starting ppopulation that
+            can be tuned by evolution.
+        use_fitness_vector : bool
+            Whether or not to condition mutation and crossover rates on parent
+            fitness. For the sake of consistency, this doesn't effect how a
+            GenomeConfig is constructed or evolved, just what information is
+            taken into account when computing mutation and crossover rates.
+        use_per_gene_config : bool
+            Whether or not to allow fixed values and mutation rates for each
+            gene. For the sake of consistency, this doesn't effect how a
+            GenomeConfig is constructed or evolved, just how genotypes get
+            initialized and how mutation rates are computed.
         """
         super().__init__('G')
         self.genome = genome
+        self.use_fitness_vector = use_fitness_vector
+        self.use_per_gene_config = use_per_gene_config
         self.gene_configs = {}
         # Create a GeneConfig object for every gene in the genome, using a
         # fixed value if specified, and otherwise allowing the gene to take on
@@ -213,7 +234,41 @@ class GenomeConfig(evolution.Evolvable):
 
     @classmethod
     def make_static(cls, genome, fixed_values=None):
+        """Make a GenomeConfig with predetermined values that can't evolve.
+
+        This is used for the predefined GenomeConfigs defined in the genome
+        module. A GenomeConfig won't evolve outside of a GenomeLineage, but its
+        initialization is different depending on whether its intended for that
+        purpose or not. Setting static=True means the GenomeConfig will use
+        sensible defaults for values for some things, instead of randomizing
+        them so task-specific values can be evolved.
+        """
         return cls(genome, fixed_values=fixed_values, static=True)
+
+    def __str__(self):
+        """Generate a nice tabular summary of the data in this GenomeConfig."""
+        row = '{0:<24} {1:<8.4f} {2:<8.4f} {3:<8.4f}'
+        header = row.replace('.4f', 's')
+        rows = [
+            header.format('Gene', 'Worse', 'Same', 'Better'),
+            row.format('global_mutation_rate', *self.global_mutation_rate),
+            row.format('global_crossover_rate', *self.global_crossover_rate),
+        ]
+        if not self.use_fitness_vector:
+            rows.insert(0, 'FitnessVector locked to SAME')
+        if not self.use_per_gene_config:
+            rows.insert(0, 'Per-gene settings IGNORED')
+        for gene_name, gene_config in self.gene_configs.items():
+            mutation_rates = [
+                gene_config.mutation_rate(
+                    vector, self.global_mutation_rate[vector])
+                for vector in FitnessVector]
+            if gene_config.fixed_value is not None:
+                suffix = f' Fixed value: {gene_config.fixed_value}'
+            else:
+                suffix = ''
+            rows.append(row.format(gene_name, *mutation_rates) + suffix)
+        return '\n'.join(rows)
 
     def initialize_genotype_data(self, data):
         """Set appropriate randomized values for all Genes in a Genotype.
@@ -225,8 +280,15 @@ class GenomeConfig(evolution.Evolvable):
             construction. The data in this array will be ignored and
             overwritten with appropriate randomized values.
         """
-        for gene_name, gene_config in self.gene_configs.items():
-            data[gene_name] = gene_config.get_initial_value()
+        # If we're using per-gene configurations, let the GeneConfig decide
+        # what the initial value should be (fixed values allowed)
+        if self.use_per_gene_config:
+            for gene_name, gene_config in self.gene_configs.items():
+                data[gene_name] = gene_config.get_initial_value()
+        # Otherwise, randomize the initial value for all genes.
+        else:
+            for gene_name, gene in self.genome.items():
+                data[gene_name] = gene.randomize()
 
     def mutation_rate(self, gene_name, fitness_vector):
         """Return the mutation rate for a gene given fitness_vector.
@@ -249,10 +311,18 @@ class GenomeConfig(evolution.Evolvable):
             of a single-value mutation in this gene (for a gene with multiple
             values, each value should mutate independently at this rate).
         """
-        # Look up the mutation rate for this gene, given the fitness_vector and
-        # the global mutation rate (which also varies by fitness_vector)
-        return self.gene_configs[gene_name].mutation_rate(
-            fitness_vector, self.global_mutation_rate[fitness_vector])
+        # If we're not using the fitness_vector, then ignore that information.
+        # Just use the same fitness_vector value every time (other values are
+        # still evolved, but are never used and have no effect on fitness)
+        if not self.use_fitness_vector:
+            fitness_vector = FitnessVector.SAME
+        # If using per-gene configuration, let the GeneConfig determine the
+        # mutation rate given the global rate and the fitness_vector.
+        if self.use_per_gene_config:
+            return self.gene_configs[gene_name].mutation_rate(
+                fitness_vector, self.global_mutation_rate[fitness_vector])
+        # Otherwise, just use the same mutation rate for all genes.
+        return self.global_mutation_rate[fitness_vector]
 
     def crossover_rate(self, fitness_vector):
         """Return the crossover rate to use given this fitness_vector.
@@ -273,6 +343,11 @@ class GenomeConfig(evolution.Evolvable):
             breeding event will use crossover (ie, sexual reproduction instead
             of asexual cloning).
         """
+        # If we're not using the fitness_vector, then ignore that information.
+        # Just use the same fitness_vector value every time (other values are
+        # still evolved, but are never used and have no effect on fitness)
+        if not self.use_fitness_vector:
+            fitness_vector = FitnessVector.SAME
         return coin_flip(self.global_crossover_rate[fitness_vector])
 
     def should_crossover(self):

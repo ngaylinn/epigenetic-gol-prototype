@@ -1,13 +1,26 @@
-import functools
-import math
-import os
+"""Functions and infrastructure to run specific genetic algorithm experiments.
+
+This project has two different kinds of experiments: ones that evolve
+GameOfLifeSimulations with a given GenomeConfig and fitness function, and ones
+that evolve a GenomeConfig to maximize performance on a given fitness function.
+
+All the experiments in this project use an ExperimentState object to track
+progress and collect data. These state objects are serializable, and will
+automatically save periodic snapshots to disk. If an experiment is interrupted,
+it can be resumed from the last snapshot. When an experiment is completed, the
+final results can be retrieved from the snapshot and used without rerunning the
+experiment. To force an experiment to run from scratch, simply delete the
+associated state pickle file.
+"""
+
+import os.path
 import pickle
 import random
-import statistics
 import time
 
 import tqdm
 import numpy as np
+import pandas as pd
 
 # import debug
 import evolution
@@ -18,52 +31,124 @@ import gol_simulation
 import kernel
 
 
+# The number of individuals in each generation. The same value is used for both
+# SimulationLineages and GenomeLineages, although this needn't be the case.
 POPULATION_SIZE = kernel.NUM_SIMS
-NUM_GENOME_GENERATIONS = 100
-NUM_SIMULATION_GENERATIONS = 200
-NUM_TRIALS = 5
+# The number of generations to evolve a GenomeLineage for.
+NUM_GENOME_GENERATIONS = 3 # 100
+# The number of generations to evolve a SimulationLineage for.
+NUM_SIMULATION_GENERATIONS = 3 # 200
+# When evolving a GameOfLifeSimulation, run the experiment this many times to
+# account for random variability.
+NUM_TRIALS = 3 # 5
+# The number of simulated generations in every SimulationLineage experiment.
+SIMULATION_EXPERIMENT_SIZE = NUM_TRIALS * NUM_SIMULATION_GENERATIONS
+# The number of simulated generations in every GenomeLineage experiment.
+GENOME_EXPERIMENT_SIZE = (NUM_GENOME_GENERATIONS * POPULATION_SIZE *
+                          NUM_TRIALS * NUM_SIMULATION_GENERATIONS)
 
+# Save a snapshot of experiment state every five minutes at least.
 SNAPSHOT_INTERVAL = 5 * 60
+# Updating the CLI is relatively slow, so don't update the progress bar more
+# often than once every second.
 PROGRESS_UPDATE_INTERVAL = 1
+
+# Variant behaviors for running a GenomeLineage. Keys are names and values are
+# meant to be passed as the last two arguments to genome_experiment.
+CONFIG_VARIATIONS = {
+    'no_vector_x_global_only': (False, False),
+    'no_vector_x_fine-grain': (False, True),
+    'vector_x_global_only': (True, False),
+    'vector_x_fine-grain': (True, True)
+}
+
+
+def reset_global_state(state=None):
+    """Reset global state used by experiments to get consistent results.
+
+    Managing global state (primarily random number generators) allows the
+    experiments to produce the same results no matter what order they run in,
+    or even if they got interrupted and resumed mid way.
+
+    The ExperimentState object takes care of calling this function when running
+    an experiment. It can also be called independently to manage global state
+    when working directly with Genotypes and GameOfLifeSimulations without an
+    experiment.
+
+    Parameters
+    ----------
+    state : ExperimentState
+        If provided, restore the global state from the snapshot saved here.
+    """
+    if state is None:
+        # Reset Evolvable ids so they're unique to this experiment.
+        evolution.next_ids = {}
+        # Seed the RNGs at the beginning of each experiment. This way, we
+        # can re-run a single experiment out of order and get the same
+        # results as if we ran the whole study.
+        random.seed(42)
+        np.random.seed(42)
+    else:
+        # Each evolved individual gets a unique identifier. Remember which
+        # ids were already used to avoid duplicates.
+        evolution.next_ids = state.data['next_ids']
+        # Restore the state of the random number generators so we get the
+        # same results as if we ran the experiment straight through without
+        # interruption. This project uses Python's RNG for almost
+        # everything, but there are a few operations in the gene_types
+        # module that get a major performance boost from using Numpy's RNG
+        # instead. Manage state for both.
+        random.setstate(state.data['python_rng'])
+        np.random.set_state(state.data['numpy_rng'])
 
 
 class ExperimentState:
     """Initializes, saves, and restores state for one experiment.
 
-    This project typically runs studies with several experiments that may each
-    run for hours at a time. For effective debugging and development its
-    important to be able to stop and resume experiments, or rerun them
-    repeatedly with exactly the same initial conditions.
+    This project runs lots of experiments, some of which may run for hours at a
+    time. To avoid redundant computation and make debugging and analysis
+    possible, it's important to stop and resume experiments, or rerun them
+    repeatedly with exactly the same initial conditions and get exactly the
+    same results.
 
     This class wraps a dictionary which captures the full state of an
-    experiment. It manages the random number generators, Evovlable ids,
-    and a progress bar UI.
+    experiment. It manages the random number generators, Evovlable ids, and a
+    progress bar UI.
     """
     def __init__(self, filename, num_simulation_generations):
+        """Constructor for ExperimentState
+
+        Parameters
+        ----------
+        filename : str
+            The name of the file where this ExperimentState is stored.
+        num_simulation_generations : int
+            The number of GameOfLifeSimulation generations that will be run for
+            this experiment. This is used to render a progress bar showing the
+            number of generations past and remaining.
+        """
         self.filename = filename
         self.num_simulation_generations = num_simulation_generations
         restored_state = self.load_from_disk()
         if restored_state:
             self.data = restored_state
-            evolution.next_ids = self.data['next_ids']
-            random.setstate(self.data['python_rng'])
-            np.random.set_state(self.data['numpy_rng'])
+            reset_global_state(self)
         else:
             self.data = {'progress': 0}
-            evolution.next_ids = {}
-            random.seed(42)
-            np.random.seed(42)
+            reset_global_state()
         self.last_save = time.time()
         self.progress_bar = None  # Initialized in the start method
 
-    def start(self):
+    def start(self, experiment_name):
         """Begin running an experiment from the start or the last snapshot."""
         if self.started():
-            print('Resuming from previous snapshot.')
+            print(f'Resuming experiment "{experiment_name}" from snapshot...')
+        else:
+            print(f'Running experiment "{experiment_name}"...')
         self.progress_bar = tqdm.tqdm(
             total=self.num_simulation_generations,
             initial=self.data['progress'],
-            mininterval=1.0,
+            mininterval=PROGRESS_UPDATE_INTERVAL,
             bar_format=('{n_fmt}/{total_fmt} |{bar}| '
                         'Elapsed: {elapsed} | '
                         'Remaining: {remaining}'))
@@ -92,14 +177,13 @@ class ExperimentState:
         """Attempt to load state from a pickle file on disk."""
         if os.path.exists(self.filename):
             with open(self.filename, 'rb') as file:
-                try:
-                    data = pickle.load(file)
-                    return data
-                except pickle.UnpicklingError:
-                    print('Error reading pickle file {file}')
+                data = pickle.load(file)
+                return data
+        return None
 
     def save_to_disk(self):
         """Save state to a pickle file on disk."""
+        # Serialize global state before saving.
         self.data['next_ids'] = evolution.next_ids
         self.data['python_rng'] = random.getstate()
         self.data['numpy_rng'] = np.random.get_state()
@@ -113,112 +197,17 @@ class ExperimentState:
             self.save_to_disk()
 
 
-class Study:
-    """A set of experiments, configured with a cross product of variables.
-
-    This project runs experiments in batches that compare performance when
-    configured in different ways. The study is built from a set of variables
-    and their potential values, as well as a function that actually runs the
-    experiment given particular settings for those variables.
-
-    A study is little more than a tree of dictionaries representing all the
-    experiments to run. The dictionary keys represent a particular setting of
-    one of the experiment variables, and the values represent all experiments
-    run with that variable bound to that setting. Each of those values could be
-    either another tree of experiments configured by another variable, or a
-    function to call to actually run the experiment. These experiment functions
-    each take a filename for the ExperimentState and return experiment
-    specific data in a dictionary.
-    """
-    def __init__(self, variables, num_simulation_generations, run_experiment):
-        """Constructor for Study
-
-        Parameters
-        ----------
-        variables : list of dict of str : any
-            A list of the variables under test in this study. Each item in this
-            list is a dictionary representing a single variable. The values in
-            this dictionary are the possible values for the given variable and
-            the keys are the name associated with each variable setting.
-        num_simulation_generations : int
-            The number of simulation generations run for each experiment, used
-            for tracking experiment progress.
-        run_experiment : Callable
-            A function to call to actually run the experiment. The first
-            parameter to this function should be an ExperimentState object, and
-            the rest should correspond to each of the variables.
-        """
-        self.num_simulation_generations = num_simulation_generations
-        self.run_experiment = run_experiment
-        self.experiment_tree = self.populate_experiment_tree(variables)
-
-    def populate_experiment_tree(self, variables, values=()):
-        """Build the dictionary tree representing all the study experiments.
-
-        This method is called recursively in order to support an arbitrary
-        number of variables.
-
-        Paramters
-        ---------
-        variables : list of dict of str : any
-            The variables to bind. On the initial call, this should be all the
-            variables for the study.
-        values : tuple of any
-            The values for the variables bound so far. On the initial call,
-            this should be left blank. It will be populated by recursive calls.
-
-        Returns
-        -------
-        dict of str : dict or Callable
-            A tree of dictionaries representing this Study. See the doc comment
-            for the Study class for details.
-        """
-        # This wrapper handles the ExperimentState object and avoids re-running
-        # the experiment if it has already completed.
-        def experiment_wrapper(args, state_filename):
-            state = ExperimentState(
-                state_filename, self.num_simulation_generations)
-            if state.finished():
-                print('Reusing cached results.')
-                return state.data
-            return self.run_experiment(state, *args)
-
-        experiment_tree = {}
-        # The base case: we've bound all but the last of our variables.
-        if len(variables) == 1:
-            # For each possible value of the last variable
-            for name, value in variables[0].items():
-                # Bind the function used to actually run the experiment with
-                # the variable values associated with this place in the
-                # experiment tree. The result will be a function that takes a
-                # filename for an ExperimentState object and returns the
-                # results of the experiment.
-                experiment_tree[name] = functools.partial(
-                    experiment_wrapper, values + (value,))
-        else:
-            # At this point we still have several variables to bind. We need to
-            # consider all permutations, so iterate through this variables
-            # values and for each one expand all possible values of the
-            # remaining variables.
-            for name, value in variables[0].items():
-                experiment_tree[name] = self.populate_experiment_tree(
-                    variables[1:], values + (value,))
-        return experiment_tree
-
-    def items(self):
-        """A convenience method to access the experiment tree."""
-        return self.experiment_tree.items()
-
-
 class SimulationLineage(evolution.Lineage):
     """A Lineage subclass for evolving GameOfLifeSimulations"""
     def __init__(self, fitness_func, genome_config):
         self.fitness_func = fitness_func
+        self.genome_config = genome_config
         # Note we store this as an attribute of the lineage object rather than
         # evaluating on demand so that the debugger can modify it as needed.
         self.frames_needed = fitness.get_frames_needed(fitness_func)
-        self.genome_config = genome_config
-        self.update_progress = lambda: None
+        # A customizable callback run after every simulation population. By
+        # default, do nothing.
+        self.update_progress_callback = lambda: None
         super().__init__()
 
     def make_initial_population(self):
@@ -227,168 +216,285 @@ class SimulationLineage(evolution.Lineage):
             for _ in range(POPULATION_SIZE)]
 
     def evaluate_population(self, population):
+        # Run all the simulations for this population.
         gol_simulation.simulate(
             population, frames_to_capture=self.frames_needed)
-        self.update_progress()
+        # Evaluate fitness according to the given fitness function.
         for simulation in population:
             simulation.fitness = self.fitness_func(simulation)
+        # Run the callback to track progress
+        self.update_progress_callback()
 
 
-def normalize_slope(slope):
-    # translate a slope value from a linear regression into a number bewteen
-    # 0 and 100 indicating the angle of the line.
-    return int(100 * (math.atan(slope) + math.pi / 2) / math.pi)
+def run_simulation_trials(update_progress_callback, fitness_func,
+                          genome_config):
+    """Run a batch of NUM_TRIALS SimulationLineages.
 
+    Since genetic algorithms rely on randomness, results can vary significantly
+    each time an lineage is run. To mitigate this, we evolve lineages in
+    batches of NUM_TRIALS and average out the performance.
 
-def median_slope(trial_series):
-    median_fitness_series = list(
-        map(statistics.median, zip(*trial_series)))
-    generations = list(range(NUM_SIMULATION_GENERATIONS))
-    slope, _ = statistics.linear_regression(generations, median_fitness_series)
-    return normalize_slope(slope)
+    Parameters
+    ----------
+    update_progress_callback : Callable
+        A function to call after each simulated generation, to update the
+        progress bar UI.
+    fitness_func : Callable
+        A function to evaluate the fitness of a GameOfLifeSimulation.
+    genome_config : GenomeConfig
+        The GenomeConfig to use when populating the SimulationLineage.
 
-
-def median_slope_times_max(trial_series):
-    median_fitness_series = list(
-        map(statistics.median, zip(*trial_series)))
-    generations = list(range(NUM_SIMULATION_GENERATIONS))
-    slope, _ = statistics.linear_regression(generations, median_fitness_series)
-    return normalize_slope(slope) * max(median_fitness_series)
-
-
-def median_integral(trial_series):
-    median_fitness_series = list(
-        map(statistics.median, zip(*trial_series)))
-    return sum(median_fitness_series)
-
-
-def median_max_fitness(trial_series):
-    median_fitness_series = list(
-        map(statistics.median, zip(*trial_series)))
-    return max(median_fitness_series)
-
-
-GENOME_FITNESS_FUNCTIONS = {
-    'median_slope_times_max': median_slope_times_max,
-    'median_integral': median_integral,
-    'median_max_fitness': median_max_fitness,
-}
-
-
-class GenomeLineage(evolution.Lineage):
-    """A Lineage subclass for evolving GenomeConfigs."""
-    def __init__(self, fitness_goal, genome_fitness_func):
-        self.fitness_goal = fitness_goal
-        self.update_progress = lambda: None
-        self.genome_fitness_func = genome_fitness_func
-        self.best_simulation = None
-        super().__init__()
-
-    def make_initial_population(self):
-        return [
-            genome_configuration.GenomeConfig(genome.GENOME)
-            for _ in range(POPULATION_SIZE)
-        ]
-
-    def evaluate_population(self, population):
-        for genome_config in population:
-            genome_config.trial_series = []
-            # There's a lot of variation in each simulation lineage, just
-            # because of random chance. To try to give the GenomeLineage a
-            # useful fitness signal, we run several simulated lineages and take
-            # the median, as this is significantly more stable.
-            for _ in range(5):
-                lineage = SimulationLineage(self.fitness_goal, genome_config)
-                lineage.update_progress = self.update_progress
-                lineage.evolve(NUM_SIMULATION_GENERATIONS)
-                # Remember trial fitness
-                genome_config.trial_series.append(
-                    lineage.fitness_by_generation)
-                # The Lineage class will automatically keep track of the best
-                # genome_config for us, but make sure we also keep track of the
-                # best simulation produced by that configuration.
-                genome_config.best_simulation = max(
-                    self.best_simulation, lineage.best_individual)
-            genome_config.fitness = self.genome_fitness_func(
-                genome_config.trial_series)
-
-
-def compare_phenotypes(state, fitness_func, genome_config):
-    # Initialize state state, if it isn't restored from a previous snapshot.
-    #state.data.setdefault('sample_simulations', [])
-    state.data.setdefault('trial_series', [])
-    state.data.setdefault('best_simulation', None)
-    state.start()
-
-    # Run a number of trials, either starting from the beginning or picking up
-    # where we left off in the last snapshot.
-    while len(state.data['trial_series']) < NUM_TRIALS:
+    Returns
+    -------
+    tuple of pd.DataFrame, GameOfLifeSimulation
+        The experiment data and the best simulation found across all trials.
+    """
+    data_frame = pd.DataFrame(columns=['Trial', 'Generation', 'Fitness'])
+    best_simulation = None
+    for trial in range(NUM_TRIALS):
+        # Set up the lineage and evolve it to completion.
         lineage = SimulationLineage(fitness_func, genome_config)
-        lineage.update_progress = state.update_progress
+        lineage.update_progress_callback = update_progress_callback
         # debugger = debug.SimulationLineageDebugger(lineage)
-
-        # Evolving a SimulationLineage only takes a few seconds, so
-        # don't bother checkpointing in the midst of that process.
         lineage.evolve(NUM_SIMULATION_GENERATIONS)
 
-        # Aggregate trial state for analysis
-        state.data['trial_series'].append(lineage.fitness_by_generation)
-        state.data['best_simulation'] = max((
-            state.data['best_simulation'], lineage.best_individual))
-        # state.data['sample_simulations'].extend(debugger.samples)
+        # Collect data
+        new_row = pd.DataFrame({
+            'Trial': trial,
+            'Generation': range(NUM_SIMULATION_GENERATIONS),
+            'Fitness': lineage.fitness_by_generation})
+        data_frame = pd.concat((data_frame, new_row))
+        best_simulation = max(best_simulation, lineage.best_individual)
+    return (data_frame, best_simulation)
 
-        # Consider saving a snapshot after each trial.
-        state.maybe_save_snapshot()
-    # Record the one best simulation across all trials.
-    #state.data['sample_simulations'].append(state.data['best_simulation'])
 
+def simulation_experiment(state_file, experiment_name,
+                          fitness_func, genome_config):
+    """Run an experiment to find the best simulation for a fitness goal.
+
+    This function evolves a population of GameOfLifeSimulations created from
+    the given GenomeConfig. Each simulation is run NUM_TRIALS times, since
+    there's significant variation from run to run. Fitness data is recorded for
+    each trial, as well as the best simulation across all trials.
+
+    Arguments
+    ---------
+    state_file : str
+        The name of the file used to store state for this experiment. If this
+        file exists, it contains cached data from a previous run of this
+        function. If the experiment completed, the data will be returned
+        unmodified. If not, the experiment will continue where it left off.
+        This function will save state to this location when the experiment is
+        complete.
+    experiment_name : str
+        The name for this experiment, used to display progress in the CLI.
+    fitness_func : Callable
+        A function to evaluate the fitness of a GameOfLifeSimulation.
+    genome_config : GenomeConfig
+        The configuration used to generate the initial population and constrain
+        evolution across generations.
+
+    Returns
+    -------
+    ExperimentState
+        The finalized data for this experiment for consumption by the
+        rebuild_output module. These fields are intended for use in analysis:
+        'fitness_data' : pd.DataFrame
+            Data table with fitness for all generations and all trials.
+        'best_simulation' : GameOfLifeSimulation
+            The single simulation with highest fitness across all trials.
+    """
+    # Use cached results if they're available.
+    state = ExperimentState(state_file, SIMULATION_EXPERIMENT_SIZE)
+    if state.finished():
+        return state.data
+
+    state.start(experiment_name)
+    # Running all the trials only takes a few seconds, so don't bother saving
+    # snapshots in the midst of that process.
+    fitness_data, best_simulation = run_simulation_trials(
+        state.update_progress, fitness_func, genome_config)
+
+    # Export data for analysis and wrap up.
+    state.data['fitness_data'] = fitness_data
+    state.data['best_simulation'] = best_simulation
     state.finish()
     return state.data
 
 
-compare_phenotypes_study = Study(
-    (fitness.EXPERIMENT_GOALS, genome.EXPERIMENT_CONFIGS),
-    NUM_TRIALS * NUM_SIMULATION_GENERATIONS,
-    compare_phenotypes)
+def weighted_median_integral(fitness_data):
+    """The fitness function used to evaluate a GenomeConfig.
+
+    When evolving a GenomeLineage, each individual is a GenomeConfig, and its
+    fitness is evaluated by running a batch of NUM_TRIALS SimulationLineages
+    with that configuration to see how they perform. This fitness function
+    tries to capture not just the fitness of the best simulations produced in
+    those trials, but also how well the genetic algorithm was able to learn and
+    adapt to the fitness function.
+
+    In short, this function looks at the area under the fitness curve, using a
+    median operation to discard outlier data and giving greater weight to later
+    generations. This was chosen because it has several nice properties:
+        - Basing this off of an integral takes the whole process of evolution
+        over generations into account rather than just the final result. It
+        favors SimulationLineages whose fitness starts high and grows higher.
+        - Taking the median removes single-trial outliers that most likely
+        represent luck rather than a good GenomeConfig. Computing the median
+        generation by generation rather than picking the median performing
+        trial has the effect of smoothing results from across all trials.
+        - Giving greater weight to later generations means SimulationLineages
+        with increasing fitness (indicating learning) are preferred to those
+        that have high fitness that doesn't improve (got stuck in a local
+        maximum early on) or those that start high and then decrease (lucky
+        initial population, but on average mutations just make things worse).
+    """
+    total = 0
+    median_by_gen = fitness_data.groupby('Generation')['Fitness'].median()
+    for generation, median_fitness in enumerate(median_by_gen):
+        # The first generation gets a weight of 0.5 and the rest smoothly grade
+        # up to a max of 1.0 for the last generation.
+        weight = 0.5 + 0.5 * generation / (NUM_GENOME_GENERATIONS - 1)
+        total += weight * median_fitness
+    return int(total)
 
 
-def evolve_genome_config(state, fitness_goal, genome_fitness_func):
-    # Initialize state state, unless we're resuming from partial data and it's
-    # already initialized.
+class GenomeLineage(evolution.Lineage):
+    """A Lineage subclass for evolving GenomeConfigs.
+
+    The individuals in this lineage are GenomeConfigs. Their fitness is
+    determined by evolving a batch of NUM_TRIALS SimulationLineages and looking
+    at their average performance across those trials. This is similar to
+    calling simulation_experiment once for every individual in the population
+    over NUM_GENOME_GENERATIONS generations.
+    """
+    def __init__(self, fitness_func, use_fitness_vector, use_per_gene_config):
+        self.fitness_func = fitness_func
+        self.use_fitness_vector = use_fitness_vector
+        self.use_per_gene_config = use_per_gene_config
+        self.best_simulation = None
+        self.update_progress_callback = lambda: None
+        super().__init__()
+
+    def make_initial_population(self):
+        return [
+            genome_configuration.GenomeConfig(
+                genome.GENOME, use_fitness_vector=self.use_fitness_vector,
+                use_per_gene_config=self.use_per_gene_config)
+            for _ in range(POPULATION_SIZE)]
+
+    def evaluate_population(self, population):
+        for genome_config in population:
+            fitness_data, best_simulation = run_simulation_trials(
+                self.update_progress_callback,
+                self.fitness_func, genome_config)
+            # Attach the results from each batch of trials to the associated
+            # GenomeConfig. This way, when we find the most fit GenomeConfig,
+            # we have data about its trials.
+            genome_config.fitness_data = fitness_data
+            genome_config.best_simulation = best_simulation
+            genome_config.fitness = weighted_median_integral(fitness_data)
+
+
+def genome_experiment(state_file, experiment_name, fitness_func,
+                      use_fitness_vector, use_per_gene_config):
+    """Find the best GenomeConfig and discover what variations worked best.
+
+    This function evolves a population of GenomeConfig objects, using each one
+    to evolve a population of GameOfLifeSimulations using SimulationLineage.
+    The fitness of each GenomeConfig is a function of how the SimulationLineage
+    performed over multiple trials.
+
+    This project uses three variations on how a GenomeConfig can evolve
+    custom behavior. This experiment is part of a study that compares the
+    impact of those three variations.
+
+    The most basic variation is tuning global mutation and crossover rates.
+    This is not uncommon for traditional genetic algorithms. Since turning this
+    off would be akin to not evolving the GenomeConfig at all, it will be
+    enabled for all experiments in this study as a baseline to compare the
+    other two techniques against.
+
+    A more novel variation is conditioning mutation and crossover rates on a
+    FitnessVector. Theoretically, this gives the genetic algorithm a greater
+    ability to steer by letting each individual in the population use feedback
+    from the previous generation when adding variation for the next one. By
+    turning this on and off, we can measure it's relative impact.
+
+    Another new variation is to adjust mutation rates for each gene, including
+    using a fixed value for a gene rather than allowing it to evolve freely.
+    Theoretically, this gives the genetic algorithm a greater ability to focus
+    its search by controlling where and how much variation is introduced from
+    one generation to the next. By turning this on and off, we can measure it's
+    relative impact.
+
+    Arguments
+    ---------
+    state_file : str
+        The name of the file used to store state for this experiment. If this
+        file exists, it contains cached data from a previous run of this
+        function. If the experiment completed, the data will be returned
+        unmodified. If not, the experiment will continue where it left off.
+        This function will save state to this location periodically and when
+        the experiment is complete.
+    experiment_name : str
+        The name for this experiment, used to display progress in the CLI.
+    fitness_func : Callable
+        A function to evaluate the fitness of a GameOfLifeSimulation.
+    use_fitness_vector : bool
+        Whether the evolved GenomeConfigs should take the FitnessVector into
+        account when computing mutation and crossover rates.
+    use_per_gene_config : bool
+        Whether evolved GenomeConfigs may fix values or customize mutation
+        rates on a gene-by-gene basis, as opposed to just randomizing gene
+        values and using the same global mutation rate for all genes.
+
+    Returns
+    -------
+    ExperimentState
+        The finalized data for this experiment for consumption by the
+        rebuild_output module. These fields are intended for use in analysis:
+        'fitness_data' : pd.DataFrame
+            Data table with fitness for all generations of the GenomeLineage.
+        'best_fitness_data' : pd.DataFrame
+            Data table with fitness for all generations and all trials of the
+            SimulationLineage for the best evolved GenomeConfig in the
+            GenomeLineage.
+        'best_simulation' : GameOfLifeSimulation
+            The single simulation with highest fitness in this experiment.
+        'best_config' : GenomeConfig
+            The best performing GenomeConfig evolved in this experiment.
+    """
+    state = ExperimentState(state_file, GENOME_EXPERIMENT_SIZE)
+    if state.finished():
+        return state.data
+
+    # Initialize a GenomeLineage, either from scratch or restoring from state.
     if 'lineage' not in state.data:
-        lineage = GenomeLineage(fitness_goal, genome_fitness_func)
+        lineage = GenomeLineage(
+            fitness_func, use_fitness_vector, use_per_gene_config)
         state.data['lineage'] = lineage
     else:
         lineage = state.data['lineage']
-    # Connect the lineage with the progress bar GUI.
-    lineage.update_progress = state.update_progress
-
-    #state.data.setdefault('sample_simulations', [])
-    state.start()
+    lineage.update_progress_callback = state.update_progress
+    state.start(experiment_name)
 
     # Actually evolve the GenomeConfig. After each generation, consider saving
     # a snapshot.
     while lineage.step_evolution(NUM_GENOME_GENERATIONS):
         state.maybe_save_snapshot()
 
-    # Summarize experiment state for analysis
+    # Export data for analysis and wrap up.
     best_config = lineage.best_individual
-    # state.data['sample_simulations'].append(best_config.best_simulation)
-    state.data['fitness_series'] = lineage.fitness_by_generation
-    state.data['best_config'] = best_config
-    state.data['best_trials'] = best_config.trial_series
+    state.data['fitness_data'] = pd.DataFrame({
+        'Fitness': lineage.fitness_by_generation,
+        'Generation': range(NUM_GENOME_GENERATIONS)
+    })
+    state.data['best_fitness_data'] = best_config.fitness_data
+    # Avoid duplicating this data in the saved state.
+    del best_config.fitness_data
     state.data['best_simulation'] = best_config.best_simulation
-
+    # Avoid duplicating this data in the saved state.
+    del best_config.best_simulation
+    state.data['best_config'] = best_config
     state.finish()
     return state.data
-
-
-fitness_goals = {
-        fitness_name: fitness.EXPERIMENT_GOALS[fitness_name]
-        for fitness_name in ['explode', 'left_to_right',
-                             'symmetry', 'three_cycle']}
-evolve_genome_study = Study(
-    (fitness_goals, GENOME_FITNESS_FUNCTIONS),
-    (NUM_GENOME_GENERATIONS * POPULATION_SIZE *
-     NUM_TRIALS * NUM_SIMULATION_GENERATIONS),
-    evolve_genome_config)

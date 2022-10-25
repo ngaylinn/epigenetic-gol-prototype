@@ -33,9 +33,9 @@ class SimulationLineageDebugger:
         self.parent_watch_list = []
         self.child_watch_list = []
         self.breeding_events = {}
-        lineage.per_generation_callback = functools.partial(
+        lineage.inspect_generation_callback = functools.partial(
             SimulationLineageDebugger._on_generation, self)
-        lineage.per_breeding_callback = functools.partial(
+        lineage.inspect_breeding_callback = functools.partial(
             SimulationLineageDebugger._on_breeding, self)
         # Make sure we record the first frame of the simulation (the phenotype)
         # so we can use it in our visualizations.
@@ -148,6 +148,8 @@ class SimulationLineageDebugger:
             child.num_parents = 1
         else:
             child.num_parents = 2
+        if not hasattr(parent, 'num_children'):
+            parent.num_children = 0
         parent.num_children += 1
         if (parent.identifier in self.parent_watch_list or
                 (mate and mate.identifier in self.parent_watch_list) or
@@ -169,15 +171,19 @@ class SimulationLineageDebugger:
         for index, simulation in enumerate(population):
             axis = fig.add_subplot(4, 8, index + 1)
             axis.set_title(simulation.identifier)
+            axis.grid(False)
             axis.spines[:].set_visible(True)
-            if simulation.num_children > 0:
+            # num_children is added by the _on_breeding callback, which is only
+            # called when breeding occurs. That means simulations that didn't
+            # get to breed had zero chidren and don't have this attribute set.
+            if hasattr(simulation, 'num_children'):
                 plt.setp(axis.spines.values(), color='#ff0000')
                 plt.setp(axis.spines.values(),
                          linewidth=simulation.num_children)
             axis.set_xlabel(f'fitness: {simulation.fitness}')
             axis.tick_params(bottom=False, left=False,
                              labelbottom=False, labelleft=False)
-            axis.imshow(simulation.history[0], cmap='gray', vmin=0, vmax=255)
+            axis.imshow(simulation.frames[0], cmap='gray', vmin=0, vmax=255)
 
     # Prints a side-by-side comparison of the full genotypes of parent, mate,
     # and child. Grid genes are displayed as an image, including diff images
