@@ -5,10 +5,10 @@ user-facing code. The intention is to document and provide basic sanity checks
 / regression tests for fundamental behaviors.
 """
 
-import random
 import unittest
 
 import evolution
+import experiments
 
 
 class MockEvolvable(evolution.Evolvable):
@@ -60,9 +60,8 @@ def count_by_fitness(population, accumulator=None):
 class TestSelection(unittest.TestCase):
     """Tests selection behavior used to propagate each generation."""
     def setUp(self):
-        # The code under test is randomized. We want to test that pseudo-random
-        # behavior, but get the same results each time we run the test.
-        random.seed(42)
+        # Seed the RNGs for repeatable pseudo-random behavior.
+        experiments.reset_global_state()
 
     def test_selection_is_proportional(self):
         """An individual is chosen proportionately to its fitness."""

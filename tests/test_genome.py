@@ -5,11 +5,11 @@ user-facing code. The intention is to document and provide basic sanity checks
 / regression tests for fundamental behaviors.
 """
 
-import random
 import unittest
 
 import numpy as np
 
+import experiments
 import genome
 import genome_configuration
 import kernel
@@ -49,10 +49,8 @@ class TestGenotype(unittest.TestCase):
     """Validate the behavior for creating genotypes from scratch and breeding.
     """
     def setUp(self):
-        # Seed the RNGs for repeatable pseudo-random behavior. The code under
-        # test uses Python and Numpy for randomness, so seed both.
-        np.random.seed(42)
-        random.seed(42)
+        # Seed the RNGs for repeatable pseudo-random behavior.
+        experiments.reset_global_state()
 
     def assertProportional(self, first, second, multiple, msg=None):
         """Assert that second is within some multiple of first.
@@ -79,7 +77,7 @@ class TestGenotype(unittest.TestCase):
     def test_mutations(self):
         """Per-gene mutations happen at the expected rate."""
         # The freeform GenomeConfig allows mutation for all genes.
-        parent = genome.Genotype(genome.EXPERIMENT_CONFIGS['freeform'])
+        parent = genome.Genotype(genome.PREDEFINED_CONFIGS['freeform'])
         gene_diffs = {}
         # This has to be pretty large since the mutation rate is pretty small.
         num_trials = 100000
@@ -100,9 +98,9 @@ class TestGenotype(unittest.TestCase):
 
     def test_crossover(self):
         """Crossover adds variety to the gene pool at the expected rate."""
-        parent = genome.Genotype(genome.EXPERIMENT_CONFIGS['freeform'])
+        parent = genome.Genotype(genome.PREDEFINED_CONFIGS['freeform'])
         parent.data = np.ones((), genome.GENOME_DTYPE)
-        mate = genome.Genotype(genome.EXPERIMENT_CONFIGS['freeform'])
+        mate = genome.Genotype(genome.PREDEFINED_CONFIGS['freeform'])
         mate.data = np.zeros((), genome.GENOME_DTYPE)
         gene_diffs = {}
         num_trials = 1000
@@ -132,8 +130,8 @@ class TestGenotype(unittest.TestCase):
         num_trials = 100
         for _ in range(num_trials):
             # The FREEFORM GenomeConfig randomizes all genes.
-            genotype_a = genome.Genotype(genome.EXPERIMENT_CONFIGS['freeform'])
-            genotype_b = genome.Genotype(genome.EXPERIMENT_CONFIGS['freeform'])
+            genotype_a = genome.Genotype(genome.PREDEFINED_CONFIGS['freeform'])
+            genotype_b = genome.Genotype(genome.PREDEFINED_CONFIGS['freeform'])
             gene_diffs = count_genotype_diffs(
                 genotype_a, genotype_b, gene_diffs)
         for gene_name, gene in genome.GENOME.items():
@@ -156,26 +154,9 @@ class TestGenotype(unittest.TestCase):
         """Genes can be initialized to a set value instead of randomized."""
         for _ in range(10):
             # The CONTROL GenomeConfig fixes some genes.
-            genotype = genome.Genotype(genome.EXPERIMENT_CONFIGS['control'])
-            # Despite randomization, these genes always have the same value.
+            genotype = genome.Genotype(genome.PREDEFINED_CONFIGS['control'])
+            # Despite randomization, the value for stamp never changes.
             self.assertFalse(genotype.data['stamp'])
-            self.assertEqual(genotype.data['repeat_mode'], kernel.REPEAT_NONE)
-
-    def test_gene_mutation_disabled(self):
-        """Mutation can be disabled by configuration."""
-        config = genome_configuration.GenomeConfig(
-            genome.GENOME,
-            {
-                'seed': genome_configuration.GeneConfig(allow_mutation=False)
-            })
-        original_genotype = genome.Genotype(config)
-        genotype = original_genotype
-        for _ in range(10):
-            genotype = genotype.make_offspring(0, 0, None)
-        # Despite several rounds of reproduction, the gene with mutation
-        # disallowed still has the same value.
-        self.assertTrue(np.array_equal(
-            original_genotype.data['seed'], genotype.data['seed']))
 
 
 if __name__ == '__main__':

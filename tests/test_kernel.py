@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 
+import experiments
 import genome
 import kernel
 
@@ -39,7 +40,7 @@ class TestPhenotypeKernel(unittest.TestCase):
     """
     def setUp(self):
         # Seed the RNG for repeatable pseudo-random behavior.
-        np.random.seed(42)
+        experiments.reset_global_state()
         # Create a simple genotype to use as a baseline for testing. Note we
         # don't bother making an actual Genotype object, since we're not
         # testing reproduction or evolution. Instead, we just mock the raw

@@ -27,7 +27,7 @@ MAX_MUTATION_RATE = 0.01
 # GeneConfig determines the mutation rate for a gene by applying a multipler to
 # the global mutation rate. The value of this multiplier ranges from 0 to
 # MAX_MULTIPLIER, inclusive.
-MAX_MULTIPLIER = 10.0
+MAX_MULTIPLIER = 2.0
 
 
 class FitnessVector(IntEnum):
