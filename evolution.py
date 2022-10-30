@@ -174,7 +174,8 @@ class Lineage:
                 for key, value in self.__dict__.items()
                 if 'callback' not in key}
 
-    def __setstate__(self, state):
+    def __setstate__(self, state_dict):
+        self.__dict__ = state_dict
         # Restore dummy callbacks so we can call them without checking for
         # their presence.
         self.inspect_generation_callback = lambda generation, population: None

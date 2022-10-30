@@ -34,13 +34,14 @@ import kernel
 # The number of individuals in each generation. The same value is used for both
 # SimulationLineages and GenomeLineages, although this needn't be the case.
 POPULATION_SIZE = kernel.NUM_SIMS
-# The number of generations to evolve a GenomeLineage for.
-NUM_GENOME_GENERATIONS = 3 # 100
+# The number of generations to evolve a GenomeLineage for. These take a very
+# long time to run, so it's fortunate they converge in fewer generations.
+NUM_GENOME_GENERATIONS = 50
 # The number of generations to evolve a SimulationLineage for.
-NUM_SIMULATION_GENERATIONS = 3 # 200
+NUM_SIMULATION_GENERATIONS = 200
 # When evolving a GameOfLifeSimulation, run the experiment this many times to
 # account for random variability.
-NUM_TRIALS = 3 # 5
+NUM_TRIALS = 5
 # The number of simulated generations in every SimulationLineage experiment.
 SIMULATION_EXPERIMENT_SIZE = NUM_TRIALS * NUM_SIMULATION_GENERATIONS
 # The number of simulated generations in every GenomeLineage experiment.
@@ -377,22 +378,23 @@ class GenomeLineage(evolution.Lineage):
 
     def make_initial_population(self):
         return [
-            genome_configuration.GenomeConfig(
+            genome_configuration.GenomeConfigEvolvable(
                 genome.GENOME, use_fitness_vector=self.use_fitness_vector,
                 use_per_gene_config=self.use_per_gene_config)
             for _ in range(POPULATION_SIZE)]
 
     def evaluate_population(self, population):
-        for genome_config in population:
+        for individual in population:
+            genome_config = individual.genome_config
             fitness_data, best_simulation = run_simulation_trials(
                 self.update_progress_callback,
                 self.fitness_func, genome_config)
             # Attach the results from each batch of trials to the associated
-            # GenomeConfig. This way, when we find the most fit GenomeConfig,
+            # Evolvable. This way, when we find the most fit GenomeConfig,
             # we have data about its trials.
-            genome_config.fitness_data = fitness_data
-            genome_config.best_simulation = best_simulation
-            genome_config.fitness = weighted_median_integral(fitness_data)
+            individual.fitness_data = fitness_data
+            individual.best_simulation = best_simulation
+            individual.fitness = weighted_median_integral(fitness_data)
 
 
 def genome_experiment(state_file, experiment_name, fitness_func,
@@ -483,18 +485,16 @@ def genome_experiment(state_file, experiment_name, fitness_func,
     while lineage.step_evolution(NUM_GENOME_GENERATIONS):
         state.maybe_save_snapshot()
 
-    # Export data for analysis and wrap up.
-    best_config = lineage.best_individual
+    # Export the fitness over generations for this experiment's GenomeLineage.
     state.data['fitness_data'] = pd.DataFrame({
         'Fitness': lineage.fitness_by_generation,
         'Generation': range(NUM_GENOME_GENERATIONS)
     })
-    state.data['best_fitness_data'] = best_config.fitness_data
-    # Avoid duplicating this data in the saved state.
-    del best_config.fitness_data
-    state.data['best_simulation'] = best_config.best_simulation
-    # Avoid duplicating this data in the saved state.
-    del best_config.best_simulation
-    state.data['best_config'] = best_config
+    # Export data from the best simulation trials run by this experiment.
+    state.data['best_fitness_data'] = lineage.best_individual.fitness_data
+    state.data['best_simulation'] = lineage.best_individual.best_simulation
+    state.data['best_config'] = lineage.best_individual.genome_config
+    # Drop data that is redundant or no longer needed from state.
+    del state.data['lineage']
     state.finish()
     return state.data
