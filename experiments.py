@@ -35,12 +35,12 @@ import kernel
 POPULATION_SIZE = kernel.NUM_SIMS
 # The number of generations to evolve a GenomeLineage for. These take a very
 # long time to run, so it's fortunate they converge in fewer generations.
-NUM_GENOME_GENERATIONS = 3  # 75
+NUM_GENOME_GENERATIONS = 75
 # The number of generations to evolve a SimulationLineage for.
-NUM_SIMULATION_GENERATIONS = 3  # 200
+NUM_SIMULATION_GENERATIONS = 200
 # When evolving a GameOfLifeSimulation, run the experiment this many times to
 # account for random variability.
-NUM_TRIALS = 3  # 5
+NUM_TRIALS = 5
 # The number of simulated generations in every SimulationLineage experiment.
 SIMULATION_EXPERIMENT_SIZE = NUM_TRIALS * NUM_SIMULATION_GENERATIONS
 # The number of simulated generations in every GenomeLineage experiment.
