@@ -24,7 +24,6 @@ import pandas as pd
 
 # import debug
 import evolution
-import fitness
 import genome
 import genome_configuration
 import gol_simulation

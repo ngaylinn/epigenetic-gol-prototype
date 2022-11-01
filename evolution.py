@@ -10,7 +10,8 @@ algorithm. This infrastructre makes a few assumptions:
   fitness score across generations.
 """
 
-from functools import total_ordering
+import abc
+import functools
 import random
 
 
@@ -72,8 +73,8 @@ def select(population, count):
 next_ids = {}
 
 
-@total_ordering  # Sortable by fitness.
-class Evolvable:
+@functools.total_ordering  # Sortable by fitness.
+class Evolvable(abc.ABC):
     """An individual evolvable by the Lineage class.
 
     This is an abstract base class meant to handle basic book keeping for each
@@ -93,6 +94,7 @@ class Evolvable:
         # To be set by subclasses
         self.fitness = None
 
+    @abc.abstractmethod
     def should_crossover(self):
         """Return true iff the make_offspring should use crossover.
 
@@ -107,6 +109,7 @@ class Evolvable:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def make_offspring(self, mate=None):
         """Produce a new Evolvable using genes from self and possibly mate.
 
@@ -140,7 +143,7 @@ class Evolvable:
         return other is not None and self.fitness < other.fitness
 
 
-class Lineage:
+class Lineage(abc.ABC):
     """Evolve an experimental population and capture statistics.
 
     This class handles the basic book keeping and statistics tracking of a
@@ -181,6 +184,7 @@ class Lineage:
         self.inspect_generation_callback = lambda generation, population: None
         self.inspect_breeding_callback = lambda gen, parent, mate, child: None
 
+    @abc.abstractmethod
     def make_initial_population(self):
         """Return a list of Evolvables to serve as the seed population.
 
@@ -191,6 +195,7 @@ class Lineage:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def evaluate_population(self, population):
         """Evaluate all individuals from population and their fitness.
 

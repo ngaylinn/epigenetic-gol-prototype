@@ -109,7 +109,7 @@ of simple on / off values for each cell. When making an initial population,
 each grid is filled with random noise. For greater variety, the density of that
 noise (that is, what portion of the cells are alive) is also randomized.
 
-Examples of random starting frames in this configuration:
+Examples of random starting frames in this configuration: \
 ![Control example](output/genome_config_samples/control_0.gif)
 ![Control example](output/genome_config_samples/control_1.gif)
 ![Control example](output/genome_config_samples/control_2.gif)
@@ -120,7 +120,7 @@ Examples of random starting frames in this configuration:
 ### Tile
 With this `GenomeConfig`, the genotype is interpreted as a small "stamp" (an
 8x8 grid of cells) of cells that gets repeated to fill the whole 64x64 game
-board. In this case, the stamp gets repeated edge-to-edge filling the entire
+board. In this case, the stamp gets repeated edge-to-edge, filling the entire
 board with no gaps or overlap. Optionally, every other copy of the tile may be
 mirrored, which allows for different interactions between copies of the stamp
 along its edges. Although this configuration narrows the search space to a very
@@ -129,7 +129,7 @@ relatively easy to randomly discover interesting cell patterns.  Repeating the
 stamp many times is a quick way to amplify its effect and quickly find
 high-performing solutions to some fitness goals.
 
-Examples of random starting frames in this configuration:
+Examples of random starting frames in this configuration: \
 ![Tile example](output/genome_config_samples/tile_0.gif)
 ![Tile example](output/genome_config_samples/tile_1.gif)
 ![Tile example](output/genome_config_samples/tile_2.gif)
@@ -147,7 +147,7 @@ it might find better solutions that aren't reachable in the Tile configuration,
 but it may take longer to do so since it might look down more dead ends that
 Tile avoids.
 
-Examples of random starting frames in this configuration:
+Examples of random starting frames in this configuration: \
 ![Stamp example](output/genome_config_samples/stamp_0.gif)
 ![Stamp example](output/genome_config_samples/stamp_1.gif)
 ![Stamp example](output/genome_config_samples/stamp_2.gif)
@@ -160,7 +160,7 @@ All genes are randomly generated and allowed to evolve freely. In effect, this
 lets the algorithm choose between any of the above configurations and even
 switch between them from one generation to the next.
 
-Examples of random starting frames in this configuration:
+Examples of random starting frames in this configuration: \
 ![Freeform example](output/genome_config_samples/freeform_0.gif)
 ![Freeform example](output/genome_config_samples/freeform_1.gif)
 ![Freeform example](output/genome_config_samples/freeform_2.gif)
@@ -192,7 +192,7 @@ better.
 ## Phase One
 This project has two phases of experimentation. The first phase serves to
 measure the performance of the genetic algorithm in all of the predefined
-`GenomeConfig`s against all four of the fitness goals. For each of those
+`GenomeConfig`s against all of the fitness goals. For each of those
 combinations, the algorithm will: 
 - Randomly generate a population of 32 `Genotype`s (that's how many can run
   simultaneously on the available GPU hardware). Each `Genotype` consists of

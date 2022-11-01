@@ -17,6 +17,7 @@ could be implemented as a layer of interpretation over such a simple genotype,
 but this code is more readable and more efficient than doing it that way.
 """
 
+import abc
 import random
 
 import numpy as np
@@ -25,7 +26,7 @@ import kernel
 from utility import coin_flip
 
 
-class Gene:
+class Gene(abc.ABC):
     """An abstract base class for a single gene in a genome.
 
     The Gene class represents the possibe values of a gene and how those values
@@ -42,6 +43,7 @@ class Gene:
         # interfacing with kernel.make_phenotypes.
         self.dtype = np.dtype(dtype)
 
+    @abc.abstractmethod
     def value_range(self):
         """The range of values this gene can accept.
 
@@ -58,10 +60,12 @@ class Gene:
         """
         return self.dtype.itemsize
 
+    @abc.abstractmethod
     def randomize(self):
         """Return a randomized valid setting for this gene."""
         raise NotImplementedError
 
+    @abc.abstractmethod
     def mutate(self, data, mutation_rate):
         """Return a copy of data, maybe with randomized mutations.
 
