@@ -3,21 +3,6 @@
 This module holds the GameOfLifeSimulation class and a few utlity methods. It
 provides the interface between a population of Evolvable objects and the CUDA
 kernel which runs many GOL simulations in parallel on an NVidia GPU.
-
-An important consideration here is when to copy data from the GPU. In order to
-record a video of the simulation or use frames from that video to evaluate
-fitness, the frames must be copied from the GPU device to the host system.
-That's an expensive operation, and naively doing it on every step of the
-simulation can slow things down dramatically.
-
-For this reason, there are two main access points for this module:
-- simulate is used to launch a population of GameOfLifeSimulations on the GPU
-  capturing only the frames needed for debugging and computing fitness scores.
-  This is what should be used when evolving a SimulationLineage.
-- record_videos is used to launch a population of GameOfLifeSimulations on the
-  GPU, capturing every frame and saving the full videos to gif files. This
-  should be called on small numbers of sample GameOfLifeSimulations captured
-  during the evolution of a SimulationLineage.
 """
 
 from PIL import Image
@@ -25,11 +10,6 @@ from PIL import Image
 import evolution
 import kernel
 
-
-# The number of frames to run every GameOfLifeSimulations.
-SIMULATION_RUN_LENGTH = 100
-# The frames needed to record a full GameOfLifeSimulation video.
-FULL_VIDEO = list(range(SIMULATION_RUN_LENGTH))
 # When exporting a simulation video, scale it up by this much to make it
 # easier to see.
 IMAGE_SCALE_FACTOR = 2
@@ -49,42 +29,12 @@ class GameOfLifeSimulation(evolution.Evolvable):
     def __init__(self, genotype):
         super().__init__('S')
         self.genotype = genotype
-        # Frames from this organism's simulated life. This may include every
-        # frame of the simulated lifetime, or just the first and / or last
-        # frames. In either case, look up frames using a relative index from
-        # the start or the end since the actual length may vary.
+        # Frames from this organism's simulated life. To be set by the simulate
+        # function below.
         self.frames = []
-        # When this simulation is being run on the GPU, sim_index will be set
-        # to indicate which of the NUM_SIMS prallel simulation slots has been
-        # allocated to this GameOfLifeSimulation.
-        self.sim_index = None
         # We track fitness multigenerationally, but for the first generation
         # there is no parent, so default to 0.
         self.parent_fitness = 0
-
-    def before_run(self, sim_index):
-        """Setup before running the simulation.
-
-        Prepares to construct this organism's phenotype by pushing the
-        necessary genotype data to the GPU.
-
-        Parameters
-        ----------
-        sim_index : int
-            The simulation index for this run.
-        """
-        self.sim_index = sim_index
-        kernel.set_genotype(self.sim_index, self.genotype.data)
-        # Clear frames before running the simulation. This way, if a
-        # GameOfLifeSimulation object is reused between evolution and later
-        # recording a full video, we won't mix frames from the two runs.
-        self.frames = []
-
-    def capture_frame(self):
-        """Add the last computed frame to the simulation frames.
-        """
-        frame = kernel.get_frame(self.sim_index)
-        self.frames.append(frame)
 
     def should_crossover(self):
         """Returns whether to perform crossover in this breeding event.
@@ -131,6 +81,7 @@ class GameOfLifeSimulation(evolution.Evolvable):
         filename : str
             The location on disk to store the gif file.
         """
+        assert len(self.frames) == kernel.SIMULATION_RUN_LENGTH
         images = []
         for frame in self.frames:
             scale = IMAGE_SCALE_FACTOR
@@ -150,7 +101,7 @@ def _make_batches(population):
         yield population[index:index + batch_size]
 
 
-def simulate(population, frames_to_capture):
+def simulate(population):
     """Simulate the lives of a population of GameOfLifeSimulations.
 
     Parameters
@@ -164,63 +115,10 @@ def simulate(population, frames_to_capture):
         SIMULATION_RUN_LENGTH values in it. For optimal performance, this list
         should be as short as possible.
     """
-    # The frames_to_capture argument might have negative frame indices, so
-    # normalize them to all be positive values.
-    frames_to_capture = [
-        index if index >= 0 else index + SIMULATION_RUN_LENGTH
-        for index in frames_to_capture]
-    # If we only want to record frames from the beginning, there's no point in
-    # running the simulation to the end.
-    steps = min(max(frames_to_capture) + 1, SIMULATION_RUN_LENGTH)
     for batch in _make_batches(population):
-        # Prepare to run the simulations.
         for sim_index, simulation in enumerate(batch):
-            simulation.before_run(sim_index)
-
-        # Create the phenotype for each simulation in population to use as the
-        # first frames in their respective simulations.
+            kernel.set_genotype(sim_index, simulation.genotype.data)
         kernel.make_phenotypes()
-        for simulation in batch:
-            if 0 in frames_to_capture:
-                simulation.capture_frame()
-
-        # Actually run the GOL simulations.
-        for step in range(1, steps):
-            kernel.step_simulations()
-            if step in frames_to_capture:
-                for simulation in batch:
-                    simulation.capture_frame()
-
-
-def record_single_video(simulation, filename):
-    """Simluate and save a gif of the lifetime for one GameOfLifeSimulation.
-
-    This function is much less efficient than recording a batch of videos using
-    record_videos. It's useful for producing incremental output instead of
-    waiting to accumulate a bunch of simulations before saving them.
-    """
-    simulate([simulation], frames_to_capture=FULL_VIDEO)
-    simulation.save_video(filename)
-
-
-def record_videos(population, path):
-    """Simulate the lives of population and save them as gif files.
-
-    This function reevaluates the full life time of each GameOfLifeSimulation
-    in population capturing each frame as it goes, which really slows things
-    down. It then resizes each frame and writes data to the file system, which
-    is slower still! Be careful calling this function on large populations.
-
-    Parameters
-    ----------
-    population : list of GameOfLifeSimulation
-        The simulations to record video of.
-    path : str
-        The file system path where all the videos should be saved. This path is
-        assumed to exist. All gif files are saved with the simulation
-        identifier (managed by Evolvable) as a name.
-    """
-    simulate(population, frames_to_capture=FULL_VIDEO)
-    for simulation in population:
-        filename = f'{path}/{simulation.identifier}.gif'
-        simulation.save_video(filename)
+        kernel.run_simulations()
+        for sim_index, simulation in enumerate(batch):
+            simulation.frames = kernel.get_video(sim_index)

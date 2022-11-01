@@ -46,10 +46,10 @@ class FitnessVector(IntEnum):
 class VectorizedFloat:
     """A evolvable float value that can be conditioned by a FitnessVector.
 
-    DynamicGenomeConfig and DynamicGeneConfig evovle float values that may or
+    DynamicGenomeConfig and DynamicGeneConfig evolve float values that may or
     may not be conditioned by a FitnessVector depending on their settings.
-    Setting and mutating these values is verbose, so this class encapsulates
-    that complexity and make the rest of the code more readable.
+    Correctly managing these values is verbose, so this class encapsulates
+    that complexity to make the rest of the code more readable.
 
     If constructed with use_fitness_vector set to True, this will manage a
     set of three values, one for every FitnessVector setting, that mutate
@@ -108,31 +108,6 @@ class GeneConfig:
         return self.gene.randomize()
 
 
-class DynamicGeneConfig(GeneConfig):
-    """A more complex and evolvable version of GeneConfig.
-
-    This class allows mutation rates to vary on a gene-by-gene basis, either
-    conditioned on a FitnessVector or not. It also suppots exploring random
-    fixed values for each gene instead of having that pre-specified.
-    """
-    def __init__(self, gene, use_fitness_vector):
-        super().__init__(gene)
-        self.use_fitness_vector = use_fitness_vector
-        # The probability 0.1 was chosen to be somewhat rare, but still common
-        # enough that a few of these show up in the initial population.
-        if coin_flip(0.1):
-            self.fixed_value = gene.randomize()
-        self.mutation_multiplier = VectorizedFloat(
-            use_fitness_vector, MAX_MULTIPLIER)
-
-    def mutation_rate(self, fitness_vector, global_rate):
-        """Get the mutation rate for this gene, given its context."""
-        if self.fixed_value:
-            return 0.0
-        multiplier = self.mutation_multiplier.get(fitness_vector)
-        return min(multiplier * global_rate, MAX_MUTATION_RATE)
-
-
 class GenomeConfig:
     """Whole genome metadata for constraining possible Genotypes.
 
@@ -187,6 +162,31 @@ class GenomeConfig:
     def crossover_rate(self, fitness_vector):
         """Return the crossover rate to use given this fitness_vector."""
         return DEFAULT_CROSSOVER_RATE
+
+
+class DynamicGeneConfig(GeneConfig):
+    """A more complex and evolvable version of GeneConfig.
+
+    This class allows mutation rates to vary on a gene-by-gene basis, either
+    conditioned on a FitnessVector or not. It also suppots exploring random
+    fixed values for each gene instead of having that pre-specified.
+    """
+    def __init__(self, gene, use_fitness_vector):
+        super().__init__(gene)
+        self.use_fitness_vector = use_fitness_vector
+        # The probability 0.1 was chosen to be somewhat rare, but still common
+        # enough that a few of these show up in the initial population.
+        if coin_flip(0.1):
+            self.fixed_value = gene.randomize()
+        self.mutation_multiplier = VectorizedFloat(
+            use_fitness_vector, MAX_MULTIPLIER)
+
+    def mutation_rate(self, fitness_vector, global_rate):
+        """Get the mutation rate for this gene, given its context."""
+        if self.fixed_value is not None:
+            return 0.0
+        multiplier = self.mutation_multiplier.get(fitness_vector)
+        return min(multiplier * global_rate, MAX_MUTATION_RATE)
 
 
 class DynamicGenomeConfig(GenomeConfig):
@@ -286,17 +286,18 @@ class GenomeConfigEvolvable(evolution.Evolvable):
         # Start by making a deep copy of self. This way we have a valid
         # GenomeConfig object with exactly the same settings, that can be
         # changed independently with out affecting self.
-        child_config = copy.deepcopy(self.genome_config)
+        result = copy.deepcopy(self)
+        child_config = result.genome_config
         # If we have a mate, then we should use it for crossover. Randomly
         # borrow setings from mate to override the ones from self.
         if mate:
             mate_config = mate.genome_config
             if coin_flip():
-                child_config.global_mutation_rate = (
-                    mate_config.global_mutation_rate.copy())
+                child_config.global_mutation_rate = copy.deepcopy(
+                    mate_config.global_mutation_rate)
             if coin_flip():
-                child_config.global_crossover_rate = (
-                    mate_config.global_crossover_rate.copy())
+                child_config.global_crossover_rate = copy.deepcopy(
+                    mate_config.global_crossover_rate)
             for gene_name in child_config.genome:
                 if coin_flip():
                     child_config.gene_configs[gene_name] = copy.deepcopy(
@@ -309,3 +310,4 @@ class GenomeConfigEvolvable(evolution.Evolvable):
                 if coin_flip(DEFAULT_MUTATION_RATE):
                     gene_config.fixed_value = gene_config.gene.randomize()
                 gene_config.mutation_multiplier.mutate()
+        return result

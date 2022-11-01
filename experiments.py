@@ -36,12 +36,12 @@ import kernel
 POPULATION_SIZE = kernel.NUM_SIMS
 # The number of generations to evolve a GenomeLineage for. These take a very
 # long time to run, so it's fortunate they converge in fewer generations.
-NUM_GENOME_GENERATIONS = 50
+NUM_GENOME_GENERATIONS = 3  # 75
 # The number of generations to evolve a SimulationLineage for.
-NUM_SIMULATION_GENERATIONS = 200
+NUM_SIMULATION_GENERATIONS = 3  # 200
 # When evolving a GameOfLifeSimulation, run the experiment this many times to
 # account for random variability.
-NUM_TRIALS = 5
+NUM_TRIALS = 3  # 5
 # The number of simulated generations in every SimulationLineage experiment.
 SIMULATION_EXPERIMENT_SIZE = NUM_TRIALS * NUM_SIMULATION_GENERATIONS
 # The number of simulated generations in every GenomeLineage experiment.
@@ -203,9 +203,6 @@ class SimulationLineage(evolution.Lineage):
     def __init__(self, fitness_func, genome_config):
         self.fitness_func = fitness_func
         self.genome_config = genome_config
-        # Note we store this as an attribute of the lineage object rather than
-        # evaluating on demand so that the debugger can modify it as needed.
-        self.frames_needed = fitness.get_frames_needed(fitness_func)
         # A customizable callback run after every simulation population. By
         # default, do nothing.
         self.update_progress_callback = lambda: None
@@ -218,8 +215,7 @@ class SimulationLineage(evolution.Lineage):
 
     def evaluate_population(self, population):
         # Run all the simulations for this population.
-        gol_simulation.simulate(
-            population, frames_to_capture=self.frames_needed)
+        gol_simulation.simulate(population)
         # Evaluate fitness according to the given fitness function.
         for simulation in population:
             simulation.fitness = self.fitness_func(simulation)
@@ -379,8 +375,8 @@ class GenomeLineage(evolution.Lineage):
     def make_initial_population(self):
         return [
             genome_configuration.GenomeConfigEvolvable(
-                genome.GENOME, use_fitness_vector=self.use_fitness_vector,
-                use_per_gene_config=self.use_per_gene_config)
+                genome.GENOME, self.use_fitness_vector,
+                self.use_per_gene_config)
             for _ in range(POPULATION_SIZE)]
 
     def evaluate_population(self, population):

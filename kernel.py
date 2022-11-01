@@ -71,12 +71,13 @@ REPEAT_ONCE = 1
 REPEAT_1D = 2
 REPEAT_2D = 3
 
-# Device-side arrays for running the simulation. The _device_frames array holds
-# the last computed frame for each simulation, while _device_buffers is scratch
-# space used to draw the next frame. After each kernel execution, these get
-# swapped so the previous frame becomes the buffer for computing the next one.
-_device_frames = cuda.device_array((NUM_SIMS,) + WORLD_SHAPE, np.uint8)
-_device_buffers = cuda.device_array((NUM_SIMS,) + WORLD_SHAPE, np.uint8)
+# The number of frames to run every GameOfLifeSimulations.
+SIMULATION_RUN_LENGTH = 100
+
+# Allocate space on the GPU device to record the full video for all simulations
+# run in parallel. This ammounts to 13107200 bytes, or 12.5 MiB total.
+_device_frames = cuda.device_array(
+    (NUM_SIMS, SIMULATION_RUN_LENGTH,) + WORLD_SHAPE, np.uint8)
 
 # A host-side copy of _device_frames, for transferring data from the GPU back
 # to Python code running on the CPU. This variable is normally None and only
@@ -95,7 +96,7 @@ def in_bounds(row, col):
 
 
 @cuda.jit
-def _step_kernel(frames, buffers):
+def _simulation_kernel(frames, step):
     # Each invocation of this function operates on a single cell (at position
     # row, col) within one of NUM_SIMs parallel simulations (indicated by
     # sim_index).
@@ -103,11 +104,11 @@ def _step_kernel(frames, buffers):
     if not in_bounds(row, col):
         return
 
-    # Our input, the previous frame from the GOL simulation this thread is
-    # working on.
-    frame = frames[sim_index]
-    # Our output, a space to put the world state that follows frame.
-    buffer = buffers[sim_index]
+    # Figure out which frames we're operating on. We read from the frame for
+    # step, and write to the frame for step + 1. The frame for step 0 is
+    # provided by make_phenotypes.
+    prev_frame = frames[sim_index][step]
+    next_frame = frames[sim_index][step + 1]
 
     # Count how many of the neighboring cells are ALIVE
     neighbors = 0
@@ -117,21 +118,21 @@ def _step_kernel(frames, buffers):
                 continue
             if not in_bounds(row + row_off, col + col_off):
                 continue
-            if frame[row + row_off][col + col_off] == ALIVE:
+            if prev_frame[row + row_off][col + col_off] == ALIVE:
                 neighbors += 1
 
     # Compute the next state for this cell based on its previous state and its
     # number of living neighbors.
-    last_state = frame[row][col]
+    last_state = prev_frame[row][col]
     next_state = DEAD
     if last_state == ALIVE and (neighbors == 2 or neighbors == 3):
         next_state = ALIVE
     if last_state == DEAD and neighbors == 3:
         next_state = ALIVE
-    buffer[row][col] = next_state
+    next_frame[row][col] = next_state
 
 
-def step_simulations():
+def run_simulations():
     """Computes the next frame for NUM_SIMS parallel GOL simulations.
 
     This function initializes the memory objects used by the GPU and then
@@ -141,26 +142,29 @@ def step_simulations():
     This function assumes that the first frames for the simulations has already
     been initialized using make_phenotypes below.
     """
-    global _device_frames, _device_buffers, _host_frames
-    # Initialize the kernel dispatcher and launch the kernel. The kernel will
-    # read the last frames from _device_frames and write the next computed
-    # frames to _device_buffers.
-    _step_kernel[
-        # Layout blocks into grids
-        (BLOCK_SIZE, BLOCK_SIZE, NUM_SIMS),
-        # Layout threads into blocks
-        (THREAD_SIZE, THREAD_SIZE)
-    ](_device_frames, _device_buffers)
+    global _device_frames, _host_frames
+    # Each iteration computes the frame for step + 1 from the frame for step,
+    # which is why we stop at SIMULATION_RUN_LENGTH - 1. The frame for step 0
+    # is supplied by make_phenotypes. This loop would be better in the
+    # simulation kernel to avoid context switching between host and device, but
+    # unfortunately that would require thread synchronization of the blocks
+    # that comprise a single simulation. Numba doesn't support syncing just
+    # the threads for those groups of blocks, and the GPU doesn't support
+    # syncing all the threads, so we must invoke the kernel many times.
+    for step in range(SIMULATION_RUN_LENGTH - 1):
+        _simulation_kernel[
+            # Layout blocks into grids
+            (BLOCK_SIZE, BLOCK_SIZE, NUM_SIMS),
+            # Layout threads into blocks
+            (THREAD_SIZE, THREAD_SIZE)
+        ](_device_frames, step)
     # Clear the host-side frame cache since it no longer accurately reflects
     # the device-side copy. It can be updated on demand by calling get_frame.
     _host_frames = None
-    # The data in buffer is now the last computed frame. The previous computed
-    # frame is free to use as the buffer in the next iteration.
-    _device_frames, _device_buffers = _device_buffers, _device_frames
 
 
 @cuda.jit
-def phenotype_kernel(genotypes, phenotypes):
+def _phenotype_kernel(genotypes, frames):
     # Each invocation of this function operates on a single cell (at position
     # row, col) within one of NUM_SIMs parallel simulations (indicated by
     # sim_index).
@@ -180,7 +184,7 @@ def phenotype_kernel(genotypes, phenotypes):
     repeat_offset_row = genotype[4][0]
     repeat_offset_col = genotype[4][1]
     mirror = genotype[5]
-    phenotype = phenotypes[sim_index]
+    phenotype = frames[sim_index][0]
 
     # If we're not using the stamp operation, then the phenotype is drawn
     # directly from the seed data.
@@ -265,41 +269,35 @@ def make_phenotypes():
     """Initialize simulation worlds by constructing phenotypes from genotypes.
 
     This function initializes the memory objects used by the GPU and then
-    invokes phenotype_kernel to compute the first frame for all the cells of
+    invokes _phenotype_kernel to compute the first frame for all the cells of
     all the simulations in paralel.
 
     Once this function has been called once, call step_simulations repeatedly
     to execut a GOL simulation.
     """
-    global _device_frames, _device_buffers, _host_frames
+    global _device_frames, _host_frames
     # Initialize the kernel dispatcher and launch the kernel. The kernel will
     # read genotype data from a device-side copy of _host_genotypes and use it
     # to draw the first frame of the simulation into _device_buffers.
-    phenotype_kernel[
+    _phenotype_kernel[
         # Layout blocks into grids
         (BLOCK_SIZE, BLOCK_SIZE, NUM_SIMS),
         # Layout threads into blocks
         (THREAD_SIZE, THREAD_SIZE)
-    ](cuda.to_device(_host_genotypes), _device_buffers)
+    ](cuda.to_device(_host_genotypes), _device_frames)
     # Clear the host-side frame cache since it no longer accurately reflects
     # the device-side copy. It can be updated on demand by calling get_frame.
     _host_frames = None
-    # The data in buffer is now the first frame in the simulation, but
-    # step_simulation expects it to be in _device_frames, so we swap the
-    # pointers. We could just draw the phenotype directly to _device_frmaes,
-    # but it seemed better to have a consistent convention of writing to
-    # buffers and reading from frames.
-    _device_frames, _device_buffers = _device_buffers, _device_frames
 
 
-def get_frame(sim_index):
-    """Grab a single frame from the simulation kernel.
+def get_video(sim_index):
+    """Grab the full video for a GameOfLifeSimulation.
 
     Normally the frames for a simulation live on the GPU, so we can compute
     frame after frame in quick succession without memory transfers. When we
-    need to capture a frame to record a video or compute fitness, we copy the
-    data from the GPU device. Although this function is called once per
-    simulation, the memory transfer is a batch operation over all simulations.
+    need to capture a video or compute fitness, we copy the data from the GPU
+    device. Although this function is called once per simulation, the memory
+    transfer is a batch operation over all simulations.
 
     Parameters
     ----------
@@ -309,8 +307,9 @@ def get_frame(sim_index):
     Returns
     -------
     np.ndarray of np.uint8
-        The last computed frame of the indicated simulation. This is an array
-        of bytes in the range 0 to 255 representing a grayscale image.
+        All the computed frames for the indicated simulation. This is an array
+        of SIMULATION_RUN_LENGTH frames, and each frame is an array of bytes in
+        the range 0 to 255 representing a grayscale image.
     """
     global _host_frames
     # _host_frames is set to None after each frame. When any one simulation
@@ -319,6 +318,9 @@ def get_frame(sim_index):
     # once for every sim_index in quick succession after a simulation step.
     if _host_frames is None:
         _host_frames = _device_frames.copy_to_host()
+    # Note that we return a copy of the video, just to make sure the caller
+    # doesn't hold a reference to _host_frames, which might result in the video
+    # data being overwritten.
     return _host_frames[sim_index]
 
 

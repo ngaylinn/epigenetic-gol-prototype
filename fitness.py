@@ -22,31 +22,7 @@ import kernel
 ALL_GOALS = {}
 
 
-def get_frames_needed(fitness_function):
-    """Look up the frames needed to evaluate a fitness goal specified by name.
-
-    This is used to improve performance by avoiding unnecessary memory
-    transfers from the GPU (see documentation in the gol_simulation module).
-
-    Parameters
-    ----------
-    fitness_function : Callable
-        A fitness function declared using the @fitness_goal decorator.
-
-    Result
-    ------
-    list of int
-        A list of frame indices analyzed by the fitness function. This is used
-        to avoid capturing every frame of a GOL simulation, which would badly
-        hurt performance. This return value is meant for use as a parameter to
-        gol_simulation.simulate.
-    """
-    # This metadata is attached to the function object by the fitness_goal
-    # decorator.
-    return fitness_function.frames_needed
-
-
-def evaluate_simulation(fitness_function, simulation):
+def evaluate_simulation(fitness_function, frames_needed, simulation):
     """Evaluate the fitness of a simulation given a specific fitness function.
 
     This function serves as an adapter from a GameOfLifeSimulation to just the
@@ -60,6 +36,9 @@ def evaluate_simulation(fitness_function, simulation):
     ----------
     fitness_function : Callabale
         A fitness function declared using the @fitness_goal decorator.
+    frames_needed : list
+        The frames indices to unpack and use as the arguments to the fitness
+        function, as provided by the @fitness_goal decorator.
     simulation : GameOfLifeSimulation
         The simulation to evaluate the fitness of. This simulation should
         already have been run with the relevant frames (as determined by
@@ -70,7 +49,6 @@ def evaluate_simulation(fitness_function, simulation):
     int
         A fitness score on an arbitrary scale. Higher values are better.
     """
-    frames_needed = get_frames_needed(fitness_function)
     frames = [simulation.frames[i] for i in frames_needed]
     return fitness_function(*frames)
 
@@ -86,11 +64,9 @@ def fitness_goal(frames_needed):
     Parameters
     ----------
     frames_needed : list of int
-        A list of frame indices analyzed by the fitness function. This is used
-        to avoid capturing every frame of a GOL simulation, which would badly
-        hurt performance. The values in this list should be relative indices
-        from the start or the end of the simulation video. These will be
-        expanded as the named arguments of the function.
+        A list of frame indices analyzed by the fitness function. This
+        decorator will bind the indicated simulation frames to the fitness
+        function's arguments.
     """
     # We need to pass frames_needed as an argument to fitness_goal, but a
     # decorator must be a function that takes a function as a parameter. So,
@@ -104,14 +80,8 @@ def fitness_goal(frames_needed):
         # Wrap the fitness function using the evaluate_simulation function to
         # provide a convenient interface to callers.
         wrapped_function = functools.partial(
-            evaluate_simulation, fitness_function)
+            evaluate_simulation, fitness_function, frames_needed)
         ALL_GOALS[goal_name] = wrapped_function
-        # Track the frames needed list by attaching it to the function. This
-        # seemed simpler than creating a parallel global dict for metadata.
-        # Attach it both to the wrapped and unwrapped versions, so that
-        # get_frames_needed doesn't have to care which its called with.
-        fitness_function.frames_needed = frames_needed
-        wrapped_function.frames_needed = frames_needed
         # This decorator just tracks metadata for the given fitness_function,
         # but does not modify its behavior. So, calling the decorator evaluates
         # to the decorated function.

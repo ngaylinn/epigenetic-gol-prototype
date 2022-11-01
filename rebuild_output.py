@@ -59,45 +59,36 @@ def make_title(name):
     return name.replace('_', ' ').title().replace(' X ', ' x ')
 
 
-def genome_config_comparison_figure(all_fitness_data, title):
-    """Generate a figure comparing GenomeConfig performance head to head.
+def evolve_simulation(fitness_name, fitness_func, config_name, genome_config):
+    """Evolve a simulation and record results of that experiment.
 
-    The figure produced has two charts. The first shows the fitness over
-    generations of simulations evolved with each GenomeConfig. A median
-    operation is used to aggregate data across trials. The second chart
-    summarizes the max fitness scores found for each GenomeConfig, using a
-    boxplot to show the spread of values across trials.
-
-    Parameters
-    ----------
-    all_fitness_data : pd.DataFrame
-        A collection of fitness data for all GenomeConfigs being compared,
-        across generations in multiple trials.
-    title : str
-        A name for this comparison, used to title the chart.
-
-    Returns
-    -------
-    plt.Figure
-        A figure visualizing the comparative performance of different
-        GenomeConfigs.
+    This function runs a simulation experiment with the given fitness and
+    GenomeConfig options, or reuses cached results if available. It saves a
+    chart of fitness over generations for that experiment, as well as a video
+    of the best simulation produced by that experiment. It returns the fitness
+    data table for the experiment for comparison against similar experiments.
     """
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle(title)
-    sns.lineplot(
-        data=all_fitness_data, x='Generation', y='Fitness',
-        hue='GenomeConfig', estimator=np.median, ax=axes[0],
-    ).set(title='Median By Generation')
-    sns.move_legend(
-        axes[0], 'center left', bbox_to_anchor=(1, .5), frameon=False)
-    sns.boxplot(
-        data=all_fitness_data, x='GenomeConfig', y='Fitness', ax=axes[1]
-    ).set(title='Max By Trials', xticklabels=[])
-    plt.tight_layout()
-    return fig
+    path = f'output/simulation_experiments/{fitness_name}/{config_name}'
+    os.makedirs(path, exist_ok=True)
+    data = experiments.simulation_experiment(
+        f'{path}/state.pickle', f'{fitness_name}: {config_name}',
+        fitness_func, genome_config)
+
+    # Chart the results of this single-config experiment.
+    fitness_data = data['fitness_data']
+    fig = sns.relplot(data=fitness_data, kind='line',
+                      x='Generation', y='Fitness', hue='Trial')
+    fig.set(title=make_title(config_name))
+    fig.savefig(f'{path}/fitness.svg')
+    plt.close()
+
+    # Save the best simulation from this experiment.
+    best_simulation = data['best_simulation']
+    best_simulation.save_video(f'{path}/best_simulation.gif')
+    return fitness_data
 
 
-def compare_configs(comparison_name, per_fitness_configs):
+def compare_configs(comparison_name, fitness_name, fitness_func, configs):
     """Compare the performance of simulations with different GenomeConfigs.
 
     This project explores how different GenomeConfigs make it easier or harder
@@ -110,8 +101,8 @@ def compare_configs(comparison_name, per_fitness_configs):
     GenomeConfigs (or restores their results from disk). It then generates a
     chart for each experiment summarizing the performance of a single
     GenomeConfig, records a video of that experiment's best simulation, and
-    generates a chart comparing the results of all the experiments side by side
-    (see genome_config_comparison_figure).
+    generates a chart comparing the results of all the experiments side by
+    side.
 
     Parameters
     ----------
@@ -124,39 +115,93 @@ def compare_configs(comparison_name, per_fitness_configs):
         dictionaries. The outer dictionary is keyed by the name of the
         fitness_goal and the inner dictionary maps a name to a GenomeConfig.
     """
-    for fitness_name, config_dict in per_fitness_configs.items():
-        path = f'output/simulation_experiments/{fitness_name}'
-        fitness_func = fitness.ALL_GOALS[fitness_name]
-        all_fitness_data = pd.DataFrame()
-        for config_name, genome_config in config_dict.items():
-            subpath = f'{path}/{config_name}'
-            os.makedirs(subpath, exist_ok=True)
-            data = experiments.simulation_experiment(
-                f'{subpath}/state.pickle', config_name,
-                fitness_func, genome_config)
+    path = f'output/simulation_experiments/{fitness_name}'
+    all_fitness_data = pd.DataFrame()
+    for config_name, genome_config in configs.items():
+        fitness_data = evolve_simulation(
+            fitness_name, fitness_func, config_name, genome_config)
+        # Build up a DataFrame with the results from all experiments, keyed
+        # by the GenomeConfig name.
+        fitness_data['GenomeConfig'] = make_title(config_name)
+        all_fitness_data = pd.concat((all_fitness_data, fitness_data))
 
-            # Chart the results of this single-config experiment.
-            fitness_data = data['fitness_data']
-            fig = sns.relplot(data=fitness_data, kind='line',
-                              x='Generation', y='Fitness', hue='Trial')
-            fig.set(title=make_title(config_name))
-            fig.savefig(f'{subpath}/fitness.svg')
-            plt.close()
+    # Make a chart summarizing all the experiments side by side.
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig.suptitle(make_title(comparison_name))
+    # On the left, we have median performance by generation for each config.
+    sns.lineplot(
+        data=all_fitness_data, x='Generation', y='Fitness',
+        hue='GenomeConfig', estimator=np.median, ax=axes[0],
+    ).set(title='Median By Generation')
 
-            # Build up a DataFrame with the results from all experiments, keyed
-            # by the GenomeConfig name.
-            fitness_data['GenomeConfig'] = make_title(config_name)
-            all_fitness_data = pd.concat((all_fitness_data, fitness_data))
+    # In the middle we have a legend which serves as a reference for both
+    # charts.
+    sns.move_legend(
+        axes[0], 'center left', bbox_to_anchor=(1, .5), frameon=False)
 
-            # Save the best simulation from this experiment.
-            best_simulation = data['best_simulation']
-            gol_simulation.record_single_video(
-                best_simulation, f'{subpath}/best_simulation.gif')
-        # Make a chart summarizing all the experiments side by side.
-        genome_config_comparison_figure(
-            all_fitness_data, make_title(comparison_name)
-        ).savefig(f'{path}/{comparison_name}.svg')
-        plt.close()
+    # On the right, we have a boxplot comparing the max fitness score for each
+    # GenomeConfig across its five trials.
+    all_fitness_data = (
+        all_fitness_data
+        .groupby(['GenomeConfig', 'Trial'])
+        .agg({'Fitness': 'max'})
+        .reset_index())
+    sns.boxplot(
+        data=all_fitness_data, x='GenomeConfig', y='Fitness', ax=axes[1]
+    ).set(title='Max Across Trials', xticklabels=[])
+    plt.tight_layout()
+    fig.savefig(f'{path}/{comparison_name}.svg')
+    plt.close()
+
+
+def evolve_config(fitness_name, fitness_func, variation_name, variation):
+    """Evolves GenomeConfigs for a fitness function, with particular settings.
+
+    This project evolves GenomeConfigs suited to particular fitness goals. It
+    does this using three distinct techniques: tuning global mutation and
+    crossover rates, using a FitnessVector to condition those rates on recent
+    performance, and tuning mutation rates on a fine-grain, gene-by-gene basis.
+
+    Evovled global mutation and crossover rates are not unheard-of in the world
+    of genetic algorithms. For this project, they are considered baseline
+    behavior for an evolved GenomeConfig against which the other techniques are
+    compared. For that reason, we test four variations to measure the impact of
+    FitnessVectors and fine-grain mutations, independently and together.
+
+    This function is used to evolve a GenomeConfig for one of the four
+    variations under consideration, to be compared against the others.
+    """
+    path = f'output/genome_experiments/{fitness_name}/{variation_name}'
+    os.makedirs(path, exist_ok=True)
+    print('Preparing to run genome experiment '
+          f'{fitness_name}, {variation_name}')
+    data = experiments.genome_experiment(
+        f'{path}/state.pickle', f'{fitness_name}: {variation_name}',
+        fitness_func, *variation)
+
+    # Record the best GenomeConfig found.
+    best_config = data['best_config']
+    with open(f'{path}/best_config.pickle', 'wb') as file:
+        pickle.dump(best_config, file)
+    with open(f'{path}/best_config.txt', 'w', encoding='utf-8') as file:
+        file.write(str(best_config))
+
+    # Chart fitness for this GenomeLineage experiment.
+    fig = sns.relplot(data=data['fitness_data'], kind='line',
+                      x='Generation', y='Fitness')
+    fig.set(title=make_title(variation_name))
+    fig.savefig(f'{path}/fitness.svg')
+    plt.close()
+
+    # Chart fitness for all the SimulationLineage trials run for the best
+    # evolved GenomeConfig
+    fig = sns.relplot(data=data['best_fitness_data'], kind='line',
+                      x='Generation', y='Fitness', hue='Trial')
+    fig.set(
+        title=make_title(f'Best Trials ({make_title(variation_name)})'))
+    fig.savefig(f'{path}/best_trials.svg')
+    plt.close()
+    return best_config
 
 
 def make_sample_populations(genome_configs):
@@ -174,79 +219,9 @@ def make_sample_populations(genome_configs):
         population = [
             gol_simulation.GameOfLifeSimulation(genome.Genotype(genome_config))
             for _ in range(experiments.POPULATION_SIZE)]
-        gol_simulation.record_videos(population, path)
-
-
-def evolve_all_genome_config_variations(fitness_name, fitness_func):
-    """Evolves GenomeConfigs for a fitness function, with different settings.
-
-    This project uses the GenomeConfig class to optimize the genetic algorithm
-    in three distinct ways: tuning global mutation and crossover rates, using a
-    FitnessVector to condition those rates on recent performance, and tuning
-    mutation rates on a fine-grain, gene-by-gene basis.
-
-    Evovled global mutation and crossover rates are not unheard-of in the world
-    of genetic algorithms. For this project, they are considered baseline
-    behavior for an evolved GenomeConfig against which the other techniques are
-    compared. For that reason, we test four variations to measure the impact of
-    FitnessVectors and fine-grain mutations, independently and together.
-
-    This function evolves GenomeConfigs to fit the given fitness goal in each
-    of these four configurations. For each one, it makes a chart summarizing
-    the performance of the GenomeLineage over the whole experiment, copies of
-    the GenomeConfig in plaintext and pickle format so it can be inspected or
-    reused, a fitness chart for the SimulationLineage run with the most fit
-    evolved GenomeConfig, and a video of the best simulation from that run.
-
-    Parameters
-    ----------
-        fitness_name : str
-            The name of the fitness goal, used for naming files.
-        fitness_func : Callable
-            The function to evaluate the fitness of a simulation.
-
-    Returns
-    -------
-    dict of str : GenomeConfig
-        A mapping from configuration name to the best GenomeConfig found in
-        that configuration, used to compare their performance.
-    """
-    best_config_per_variation = {}
-    for variation_name, args in experiments.CONFIG_VARIATIONS.items():
-        path = f'output/genome_experiments/{fitness_name}/{variation_name}'
-        os.makedirs(path, exist_ok=True)
-        data = experiments.genome_experiment(
-            f'{path}/state.pickle', variation_name, fitness_func, *args)
-
-        # Record the best GenomeConfig found.
-        best_config = data['best_config']
-        best_config_per_variation[variation_name] = best_config
-        with open(f'{path}/best_config.pickle', 'wb') as file:
-            pickle.dump(best_config, file)
-        with open(f'{path}/best_config.txt', 'w', encoding='utf-8') as file:
-            file.write(str(best_config))
-
-        # Chart fitness for this GenomeLineage experiment.
-        fig = sns.relplot(data=data['fitness_data'], kind='line',
-                          x='Generation', y='Fitness')
-        fig.set(title=make_title(variation_name))
-        fig.savefig(f'{path}/fitness.svg')
-        plt.close()
-
-        # Chart fitness for all the SimulationLineage trials run for the best
-        # evolved GenomeConfig
-        fig = sns.relplot(data=data['best_fitness_data'], kind='line',
-                          x='Generation', y='Fitness', hue='Trial')
-        fig.set(
-            title=make_title(f'Best Trials ({make_title(variation_name)})'))
-        fig.savefig(f'{path}/best_trials.svg')
-        plt.close()
-
-        # Record a video of the best simulation made from the best evolved
-        # GenomeConfig
-        gol_simulation.record_single_video(
-            data['best_simulation'], f'{path}/best_simulation.gif')
-    return best_config_per_variation
+        gol_simulation.simulate(population)
+        for simulation in population:
+            simulation.save_video(f'{path}/{simulation.identifier}.gif')
 
 
 def main():
@@ -256,45 +231,50 @@ def main():
     # Select which fitness goals to analyze.
     fitness_goals = {
         name: func for name, func in fitness.ALL_GOALS.items()
-        if name in ['explode', 'left_to_right', 'symmetry',
-                    'two_cycle', 'three_cycle']}
+        if name in ['explode', 'left_to_right']} #, 'symmetry', 'two_cycle', 'three_cycle']}
 
     # Evolve GenomeConfigs for every fitness goal, with and without fitness
     # vectors and fine-grain mutations enabled.
-    all_evolved_configs = {}
-    best_evolved_configs = {}
+    evolved_configs = {}
     for fitness_name, fitness_func in fitness_goals.items():
-        evolved_configs = evolve_all_genome_config_variations(
-            fitness_name, fitness_func)
-        all_evolved_configs[fitness_name] = evolved_configs
-        best_evolved_configs[
-            f'evolved_for_{fitness_name}'] = max(evolved_configs.values())
+        variant_configs = {}
+        for variation_name, variation in experiments.CONFIG_VARIATIONS.items():
+            variant_configs[variation_name] = evolve_config(
+                fitness_name, fitness_func, variation_name, variation)
 
-    # Compare the performance of the GenomeConfigs evolved with and without
-    # fitness vectors and fine-grain mutations. This shows the effect those
-    # variations had on the genetic algorithm, both separately and together.
-    compare_configs('compare_evolved_variations', all_evolved_configs)
+        # Compare the performance of the GenomeConfigs evolved with and without
+        # fitness vectors and fine-grain mutations. This shows the effect those
+        # variations had on the genetic algorithm, separately and together.
+        compare_configs('compare_evolved_variations', fitness_name,
+                        fitness_func, variant_configs)
+
+        # Save the evolved GenomeConfig with everything enabled to use as the
+        # standard to compare against the predefined GenomeConfigs.
+        evolved_config = variant_configs['vector_x_fine-grain']
+        evolved_configs[f'evolved_for_{fitness_name}'] = evolved_config
 
     # Compare the performance of the best evolved GenomeConfig for each fitness
     # goal on all of the fitness goals, including the ones it wasn't evolved
     # for. This shows how task-specific each GenomeConfig has evolved to be.
-    compare_configs('compare_evolved_configs_cross_task',
-                    {fitness_name: best_evolved_configs
-                     for fitness_name in fitness_goals})
+    for fitness_name, fitness_func in fitness_goals.items():
+        compare_configs('compare_evolved_configs_cross_task',
+                        fitness_name, fitness_func, evolved_configs)
 
     # For each fitness function, compare the performance of the predefined
     # GenomeConfigs against the best one evolved for that fitness goal.
-    compare_configs(
-        'compare_predefined_to_evolved_configs',
-        {fitness_name: {
+    for fitness_name, fitness_func in fitness_goals.items():
+        configs = genome.PREDEFINED_CONFIGS | {
             config_name: evolved_config
-            for config_name, evolved_config in best_evolved_configs.items()
-            if fitness_name in config_name} | genome.PREDEFINED_CONFIGS
-         for fitness_name in fitness_goals})
+            for config_name, evolve_config in evolved_configs.items()
+            if fitness_name in config_name
+        }
+        compare_configs('compare_predefined_to_evolved_configs',
+                        fitness_name, fitness_func, configs)
 
     # Save an example initial population to document the behavior of the
     # GenomeConfigs evaluated above.
-    make_sample_populations(genome.PREDEFINED_CONFIGS | best_evolved_configs)
+    print('Saving sample populations')
+    make_sample_populations(genome.PREDEFINED_CONFIGS | evolved_configs)
 
 
 if __name__ == '__main__':
