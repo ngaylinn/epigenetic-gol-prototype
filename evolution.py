@@ -137,10 +137,14 @@ class Evolvable(abc.ABC):
         raise NotImplementedError
 
     def __eq__(self, other):
-        return other is not None and self.fitness == other.fitness
+        return (other is not None and
+                isinstance(other, self.__class__) and
+                self.fitness == other.fitness)
 
     def __lt__(self, other):
-        return other is not None and self.fitness < other.fitness
+        return (other is not None and
+                isinstance(other, self.__class__) and
+                self.fitness < other.fitness)
 
 
 class Lineage(abc.ABC):

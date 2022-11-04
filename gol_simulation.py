@@ -31,7 +31,7 @@ class GameOfLifeSimulation(evolution.Evolvable):
         self.genotype = genotype
         # Frames from this organism's simulated life. To be set by the simulate
         # function below.
-        self.frames = []
+        self.frames = None
         # We track fitness multigenerationally, but for the first generation
         # there is no parent, so default to 0.
         self.parent_fitness = 0
@@ -81,7 +81,7 @@ class GameOfLifeSimulation(evolution.Evolvable):
         filename : str
             The location on disk to store the gif file.
         """
-        assert len(self.frames) == kernel.SIMULATION_RUN_LENGTH
+        assert self.frames is not None, 'Make sure you run simulate first.'
         images = []
         for frame in self.frames:
             scale = IMAGE_SCALE_FACTOR

@@ -60,9 +60,9 @@ class VectorizedFloat:
         self.use_fitness_vector = use_fitness_vector
         self.max_value = max_value
         if self.use_fitness_vector:
-            self.value = [self._random_value() for _ in FitnessVector]
+            self.multi_value = [self._random_value() for _ in FitnessVector]
         else:
-            self.value = self._random_value()
+            self.single_value = self._random_value()
 
     # Get a random valid setting for this value.
     def _random_value(self):
@@ -71,23 +71,23 @@ class VectorizedFloat:
     def vector(self):
         """Return this value's setting across all FitnessVector values."""
         if self.use_fitness_vector:
-            return self.value
-        return [self.value for _ in FitnessVector]
+            return self.multi_value
+        return [self.single_value for _ in FitnessVector]
 
     def get(self, fitness_vector):
         """Get the correct value for the given fitness_vector."""
         if self.use_fitness_vector:
-            return self.value[fitness_vector]
-        return self.value
+            return self.multi_value[fitness_vector]
+        return self.single_value
 
     def mutate(self):
         """Maybe randomly change the values in this object."""
         if self.use_fitness_vector:
             for fitness_vector in FitnessVector:
                 if coin_flip(DEFAULT_MUTATION_RATE):
-                    self.value[fitness_vector] = self._random_value()
+                    self.multi_value[fitness_vector] = self._random_value()
         elif coin_flip(DEFAULT_MUTATION_RATE):
-            self.value = self._random_value()
+            self.single_value = self._random_value()
 
 
 class GeneConfig:

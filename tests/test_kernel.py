@@ -24,11 +24,17 @@ def make_phenotype(genotype):
     ----------
     genotype : Genotype
         The genotype data used to generate the phenotype.
+
+    Returns
+    -------
+    np.ndarray
+        The phenotype (that is, first frame of the GameOfLifeSimulation)
+        corresponding to the given genotype.
     """
     for sim_index in range(kernel.NUM_SIMS):
         kernel.set_genotype(sim_index, genotype)
     kernel.make_phenotypes()
-    return kernel.get_frame(0)
+    return kernel.get_video(0)[0]
 
 
 class TestPhenotypeKernel(unittest.TestCase):

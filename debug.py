@@ -46,7 +46,7 @@ class SimulationLineageDebugger:
         """
         self.generation_watch_list.extend(generations)
 
-    def break_on_fitness_change(self, threshold):
+    def break_on_fitness_increase(self, threshold):
         """Break when fitness increases more than threshold in one generation.
 
         Calling this method has no immediate effect, but once you call the
