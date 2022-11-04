@@ -107,6 +107,14 @@ class GeneConfig:
             return self.fixed_value
         return self.gene.randomize()
 
+    # The fitness vector is not considered here, but is used by the
+    # DynamicGeneConfig subclass when overriding this method.
+    def mutation_rate(self, fitness_vector, global_rate):
+        """Get the mutation rate for this gene, given its context."""
+        if self.fixed_value is not None:
+            return 0.0
+        return global_rate
+
 
 class GenomeConfig:
     """Whole genome metadata for constraining possible Genotypes.
@@ -151,14 +159,15 @@ class GenomeConfig:
         for gene_name, gene_config in self.gene_configs.items():
             data[gene_name] = gene_config.get_initial_value()
 
-    # gene_name and fitness_vector are unused for this method, but they matter
-    # for the DynamicGenomeConfig subclass.
+    # fitness_vector is unused for this method, but is used by the
+    # DynamicGenomeConfig subclass when overriding this method.
     def mutation_rate(self, gene_name, fitness_vector):
         """Return the mutation rate for a gene given fitness_vector."""
-        return DEFAULT_MUTATION_RATE
+        return self.gene_configs[gene_name].mutation_rate(
+            fitness_vector, DEFAULT_MUTATION_RATE)
 
-    # fitness_vector is unused for this method, but it matters for the
-    # DynamicGenomeConfig subclass.
+    # fitness_vector is unused for this method, but is used by the
+    # DynamicGenomeConfig subclass when overriding this method.
     def crossover_rate(self, fitness_vector):
         """Return the crossover rate to use given this fitness_vector."""
         return DEFAULT_CROSSOVER_RATE

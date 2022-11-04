@@ -318,9 +318,6 @@ def get_video(sim_index):
     # once for every sim_index in quick succession after a simulation step.
     if _host_frames is None:
         _host_frames = _device_frames.copy_to_host()
-    # Note that we return a copy of the video, just to make sure the caller
-    # doesn't hold a reference to _host_frames, which might result in the video
-    # data being overwritten.
     return _host_frames[sim_index]
 
 

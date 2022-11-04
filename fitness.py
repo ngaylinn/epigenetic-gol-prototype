@@ -169,7 +169,7 @@ def left_to_right(first_frame, last_frame):
     last_ratio = (np.count_nonzero(last_right == kernel.ALIVE) /
                   (np.count_nonzero(last_left == kernel.ALIVE) + 1))
     # Combine the two ratios into one fitness score.
-    return first_ratio * last_ratio
+    return int(first_ratio * last_ratio)
 
 
 @fitness_goal([-1])

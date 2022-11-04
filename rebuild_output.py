@@ -117,6 +117,8 @@ def compare_configs(comparison_name, fitness_name, fitness_func, configs):
     """
     path = f'output/simulation_experiments/{fitness_name}'
     all_fitness_data = pd.DataFrame()
+    # Run / load data from all the simulation experiments to be compared and
+    # aggregate their results into a single DataFrame.
     for config_name, genome_config in configs.items():
         fitness_data = evolve_simulation(
             fitness_name, fitness_func, config_name, genome_config)
@@ -125,13 +127,24 @@ def compare_configs(comparison_name, fitness_name, fitness_func, configs):
         fitness_data['GenomeConfig'] = make_title(config_name)
         all_fitness_data = pd.concat((all_fitness_data, fitness_data))
 
+    # Make sure the color coding is consistent between the two charts.
+    hue_order = sorted(all_fitness_data['GenomeConfig'].unique())
+
     # Make a chart summarizing all the experiments side by side.
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle(make_title(comparison_name))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+    fig.suptitle(make_title(comparison_name + f' for_{fitness_name}'))
     # On the left, we have median performance by generation for each config.
     sns.lineplot(
         data=all_fitness_data, x='Generation', y='Fitness',
-        hue='GenomeConfig', estimator=np.median, ax=axes[0],
+        hue='GenomeConfig', ax=axes[0], hue_order=hue_order,
+        # Draw a line for the median value, not the mean (which is default).
+        # This is more representative, since it only includes real data points
+        # found in our experiments, and not the extreme outliers.
+        estimator=np.median,
+        # Set the error bars to match the box part of the boxplot. This makes
+        # it easier to correlate the two charts, but also gets rid of extreme
+        # outlier data which made the first chart hard to read.
+        errorbar=('pi', 50)
     ).set(title='Median By Generation')
 
     # In the middle we have a legend which serves as a reference for both
@@ -147,8 +160,18 @@ def compare_configs(comparison_name, fitness_name, fitness_func, configs):
         .agg({'Fitness': 'max'})
         .reset_index())
     sns.boxplot(
-        data=all_fitness_data, x='GenomeConfig', y='Fitness', ax=axes[1]
-    ).set(title='Max Across Trials', xticklabels=[])
+        data=all_fitness_data, x='GenomeConfig', y='Fitness', ax=axes[1],
+        hue_order=hue_order
+    ).set(title='Max Across Trials',
+          # Squeezing the GenomeConfig labels into the x axis doesn't work, so
+          # just use the order / color code to indicate which is which.
+          xticklabels=[])
+
+    # Matplotlib hides the tickmarks for the y axis of the second chart by
+    # default, since it's shared with the first chart. Force those back on for
+    # improved readability.
+    axes[1].yaxis.set_tick_params(labelleft=True)
+
     plt.tight_layout()
     fig.savefig(f'{path}/{comparison_name}.svg')
     plt.close()
@@ -201,6 +224,10 @@ def evolve_config(fitness_name, fitness_func, variation_name, variation):
         title=make_title(f'Best Trials ({make_title(variation_name)})'))
     fig.savefig(f'{path}/best_trials.svg')
     plt.close()
+
+    # Record a video of the best simulation found for this GenomeConfig.
+    best_simulation = data['best_simulation']
+    best_simulation.save_video(f'{path}/best_simulation.gif')
     return best_config
 
 
@@ -265,7 +292,7 @@ def main():
     for fitness_name, fitness_func in fitness_goals.items():
         configs = genome.PREDEFINED_CONFIGS | {
             config_name: evolved_config
-            for config_name, evolve_config in evolved_configs.items()
+            for config_name, evolved_config in evolved_configs.items()
             if fitness_name in config_name
         }
         compare_configs('compare_predefined_to_evolved_configs',
