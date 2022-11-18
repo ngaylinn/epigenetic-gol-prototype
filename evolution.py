@@ -14,6 +14,8 @@ import abc
 import functools
 import random
 
+import pandas as pd
+
 
 def select(population, count):
     """Choose count individuals from population in proportion to fitness.
@@ -156,13 +158,15 @@ class Lineage(abc.ABC):
 
     Attributes
     ----------
-    fitness_by_generation : list of int
-        A list with the maximum fitness score from each generation.
+    fitness_data : pd.DataFrame
+        A Pandas DataFrame with the fitness data for all organisms across all
+        generations.
     best_individual : Evolvable
         The single most fit individual found across all generations.
     """
     def __init__(self):
-        self.fitness_by_generation = []
+        self.fitness_data = pd.DataFrame(
+            columns=['Generation', 'Identifier', 'Fitness'])
         self.generation = 0
         self.population = None
         self.best_individual = None
@@ -225,10 +229,16 @@ class Lineage(abc.ABC):
         """
         # Defer to the subclass to simulate population and evaluate fitness.
         self.evaluate_population(population)
-        # Update our book keeping of individuals with the best fitness score.
-        best_of_generation = max(population)
-        self.fitness_by_generation.append(best_of_generation.fitness)
-        self.best_individual = max(best_of_generation, self.best_individual)
+
+        # Log fitness data for all simulations.
+        generation_data = pd.DataFrame({
+            'Generation': self.generation,
+            'Identifier': [individual.identifier for individual in population],
+            'Fitness': [individual.fitness for individual in population]})
+        self.fitness_data = pd.concat((self.fitness_data, generation_data))
+
+        # Keep track of the best individual across all generations.
+        self.best_individual = max(max(population), self.best_individual)
 
     def step_evolution(self, num_generations):
         """Run the evolution of this lineage forward by one step.
@@ -253,6 +263,8 @@ class Lineage(abc.ABC):
         if self.generation == 0:
             # Defer to the subclass to supply the initial population.
             self.population = self.make_initial_population()
+        if self.generation >= num_generations:
+            return False
         self.run_generation(self.population)
         # Breed the next generation, unless this is the last one.
         if self.generation + 1 < num_generations:

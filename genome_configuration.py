@@ -12,6 +12,8 @@ import copy
 import random
 from enum import IntEnum
 
+import pandas as pd
+
 import evolution
 from utility import coin_flip
 
@@ -68,7 +70,7 @@ class VectorizedFloat:
     def _random_value(self):
         return random.random() * self.max_value
 
-    def vector(self):
+    def as_vector(self):
         """Return this value's setting across all FitnessVector values."""
         if self.use_fitness_vector:
             return self.multi_value
@@ -183,9 +185,12 @@ class DynamicGeneConfig(GeneConfig):
     def __init__(self, gene, use_fitness_vector):
         super().__init__(gene)
         self.use_fitness_vector = use_fitness_vector
-        # The probability 0.1 was chosen to be somewhat rare, but still common
-        # enough that a few of these show up in the initial population.
-        if coin_flip(0.1):
+        # Maybe start with a fixed value. Note, this is only used for small
+        # genes that tweak behavior, not large genes (like 'seed') that are the
+        # main source of entropy and learning in the system. The probability
+        # 0.1 was chosen to be somewhat rare, but still common enough that a
+        # few of these show up in the initial population.
+        if gene.num_values() <= 2 and coin_flip(0.1):
             self.fixed_value = gene.randomize()
         self.mutation_multiplier = VectorizedFloat(
             use_fitness_vector, MAX_MULTIPLIER)
@@ -244,9 +249,9 @@ class DynamicGenomeConfig(GenomeConfig):
         rows = [
             header.format('Gene', 'Worse', 'Same', 'Better'),
             row.format('global_mutation_rate',
-                       *self.global_mutation_rate.vector()),
+                       *self.global_mutation_rate.as_vector()),
             row.format('global_crossover_rate',
-                       *self.global_crossover_rate.vector()),
+                       *self.global_crossover_rate.as_vector()),
         ]
         for gene_name, gene_config in self.gene_configs.items():
             mutation_rates = [
@@ -258,6 +263,29 @@ class DynamicGenomeConfig(GenomeConfig):
                 suffix = ''
             rows.append(row.format(gene_name, *mutation_rates) + suffix)
         return '\n'.join(rows)
+
+    def to_data_frame(self):
+        """Return a DataFrame with this GenomeConfig's data for analysis."""
+        result = pd.DataFrame()
+        for fitness_vector in FitnessVector:
+            keys = (['global_mutation_rate', 'global_crossover_rate'] +
+                    list(self.gene_configs.keys()))
+            rates = ([self.global_mutation_rate.get(fitness_vector),
+                      self.global_crossover_rate.get(fitness_vector)] +
+                     [self.mutation_rate(gene_name, fitness_vector)
+                      for gene_name in self.gene_configs])
+            fixed_values = ([None, None] +
+                            [gene_config.fixed_value for
+                             gene_config in self.gene_configs.values()])
+            result = pd.concat((
+                result,
+                pd.DataFrame({
+                    'key': keys,
+                    'fitness_vector': fitness_vector.name,
+                    'rate': rates,
+                    'fixed_value': fixed_values
+                })))
+        return result
 
     def mutation_rate(self, gene_name, fitness_vector):
         global_rate = self.global_mutation_rate.get(fitness_vector)
@@ -316,6 +344,10 @@ class GenomeConfigEvolvable(evolution.Evolvable):
         child_config.global_crossover_rate.mutate()
         if self.use_per_gene_config:
             for gene_config in self.genome_config.gene_configs.values():
+                # Again, only fix values for genes with a small number of
+                # values, not big compound genes like 'seed'.
+                if gene_config.gene.num_values() >= 2:
+                    continue
                 if coin_flip(DEFAULT_MUTATION_RATE):
                     gene_config.fixed_value = gene_config.gene.randomize()
                 gene_config.mutation_multiplier.mutate()

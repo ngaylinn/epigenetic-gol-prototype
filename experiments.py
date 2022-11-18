@@ -35,7 +35,7 @@ import kernel
 POPULATION_SIZE = kernel.NUM_SIMS
 # The number of generations to evolve a GenomeLineage for. These take a very
 # long time to run, so it's fortunate they converge in fewer generations.
-NUM_GENOME_GENERATIONS = 75
+NUM_GENOME_GENERATIONS = 50
 # The number of generations to evolve a SimulationLineage for.
 NUM_SIMULATION_GENERATIONS = 200
 # When evolving a GameOfLifeSimulation, run the experiment this many times to
@@ -164,14 +164,14 @@ class ExperimentState:
 
     def finish(self):
         """Wrap up the experiment, save data, and hide the progress bar."""
-        self.data['done'] = True
+        self.data['progress'] = self.num_simulation_generations
         self.progress_bar.close()
         self.progress_bar.clear()
         self.save_to_disk()
 
     def finished(self):
         """Returns True iff this experiment has already completed."""
-        return 'done' in self.data
+        return self.data['progress'] >= self.num_simulation_generations
 
     def load_from_disk(self):
         """Attempt to load state from a pickle file on disk."""
@@ -245,7 +245,8 @@ def run_simulation_trials(update_progress_callback, fitness_func,
     tuple of pd.DataFrame, GameOfLifeSimulation
         The experiment data and the best simulation found across all trials.
     """
-    data_frame = pd.DataFrame(columns=['Trial', 'Generation', 'Fitness'])
+    fitness_data = pd.DataFrame(
+        columns=['Trial', 'Generation', 'Identifier', 'Fitness'])
     best_simulation = None
     for trial in range(NUM_TRIALS):
         # Set up the lineage and evolve it to completion.
@@ -254,14 +255,14 @@ def run_simulation_trials(update_progress_callback, fitness_func,
         # debugger = debug.SimulationLineageDebugger(lineage)
         lineage.evolve(NUM_SIMULATION_GENERATIONS)
 
-        # Collect data
-        new_row = pd.DataFrame({
-            'Trial': trial,
-            'Generation': range(NUM_SIMULATION_GENERATIONS),
-            'Fitness': lineage.fitness_by_generation})
-        data_frame = pd.concat((data_frame, new_row))
+        # Add the data from this trial to the rest.
+        trial_data = lineage.fitness_data
+        trial_data['Trial'] = trial
+        fitness_data = pd.concat((fitness_data, trial_data))
+
+        # Keep track of the best simulation across trials.
         best_simulation = max(best_simulation, lineage.best_individual)
-    return (data_frame, best_simulation)
+    return (fitness_data, best_simulation)
 
 
 def simulation_experiment(state_file, experiment_name,
@@ -327,6 +328,13 @@ def weighted_median_integral(fitness_data):
     tries to capture not just the fitness of the best simulations produced in
     those trials, but also how well the genetic algorithm was able to learn and
     adapt to the fitness function.
+
+    One challenge with evaluating fitness for a GenomeConfig is how noisy the
+    signal is. The evaluation function is partly randomized, so even "twins"
+    with the same GenomeConfig may get different fitness scores. To mitigate
+    this effect, this function factors in the fitness scores of the full
+    population, at every generation, on all trials. This gives a clearer signal
+    for how the GenomeConfig itself affects the process of evolution.
 
     In short, this function looks at the area under the fitness curve, using a
     median operation to discard outlier data and giving greater weight to later
@@ -481,15 +489,10 @@ def genome_experiment(state_file, experiment_name, fitness_func,
         state.maybe_save_snapshot()
 
     # Export the fitness over generations for this experiment's GenomeLineage.
-    state.data['fitness_data'] = pd.DataFrame({
-        'Fitness': lineage.fitness_by_generation,
-        'Generation': range(NUM_GENOME_GENERATIONS)
-    })
+    state.data['fitness_data'] = lineage.fitness_data
     # Export data from the best simulation trials run by this experiment.
     state.data['best_fitness_data'] = lineage.best_individual.fitness_data
     state.data['best_simulation'] = lineage.best_individual.best_simulation
     state.data['best_config'] = lineage.best_individual.genome_config
-    # Drop data that is redundant or no longer needed from state.
-    del state.data['lineage']
     state.finish()
     return state.data

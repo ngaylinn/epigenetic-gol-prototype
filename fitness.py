@@ -90,12 +90,6 @@ def fitness_goal(frames_needed):
 
 
 @fitness_goal([-2, -1])
-def active(prev_frame, last_frame):
-    """Number of cells changed between the last two frames."""
-    return np.count_nonzero(last_frame != prev_frame)
-
-
-@fitness_goal([-2, -1])
 def still_life(prev_frame, last_frame):
     """Number of live cells that are the same between the last two frames."""
     return np.count_nonzero(np.logical_and(
@@ -108,12 +102,6 @@ def explode(first_frame, last_frame):
     alive_on_first = np.count_nonzero(first_frame == kernel.ALIVE)
     alive_on_last = np.count_nonzero(last_frame == kernel.ALIVE)
     return int(100 * alive_on_last / (1 + alive_on_first))
-
-
-@fitness_goal([-1])
-def full(last_frame):
-    """Number of cells alive in the last frame."""
-    return np.count_nonzero(last_frame == kernel.ALIVE)
 
 
 @fitness_goal([-4, -3, -2, -1])

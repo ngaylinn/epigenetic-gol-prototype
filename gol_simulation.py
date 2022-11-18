@@ -13,6 +13,10 @@ import kernel
 # When exporting a simulation video, scale it up by this much to make it
 # easier to see.
 IMAGE_SCALE_FACTOR = 2
+# Controls the playback speed of the animated gif, including an extended
+# duration for the first frame, so you can see the phenotype clearly.
+MILLISECONDS_PER_FRAME = 100
+MILLISECONDS_FOR_PHENOTYPE = 10 * MILLISECONDS_PER_FRAME
 
 
 class GameOfLifeSimulation(evolution.Evolvable):
@@ -83,6 +87,12 @@ class GameOfLifeSimulation(evolution.Evolvable):
         """
         assert self.frames is not None, 'Make sure you run simulate first.'
         images = []
+        # Set durations for every frame. Note, this is important, since Pillow
+        # will automatically drop repeated frames otherwise.
+        durations = [MILLISECONDS_FOR_PHENOTYPE]
+        durations.extend([MILLISECONDS_PER_FRAME] * len(self.frames))
+        # Add some extra copies of the first frame to make the phenotype
+        # visible.
         for frame in self.frames:
             scale = IMAGE_SCALE_FACTOR
             # Scale up each frame (without interpolation, since we want to see
@@ -90,7 +100,8 @@ class GameOfLifeSimulation(evolution.Evolvable):
             resized = frame.repeat(scale, 0).repeat(scale, 1)
             images.append(Image.fromarray(resized, mode="L"))
         images[0].save(
-            filename, save_all=True, append_images=images[1:], loop=0)
+            filename, save_all=True, append_images=images[1:], loop=0,
+            duration=durations)
 
 
 # Breaks up a list of GameOfLifeSimulation objects into batches that will fit
