@@ -50,8 +50,8 @@ problems. In addition to evolving Game of Life simulations, the demo also
 evolves different *ways* to evolve those simulations, and compares them
 head-to-head to see which is more effective. More details of this project's
 design, motivation, and execution can be found [below](#algorithm-overview).
-The full results and analysis of these experiments are available [here]().
-***TODO: Update link***
+The full results and analysis of these experiments are available [here](
+https://github.com/ngaylinn/epigenetic-gol-prototype-results).
 
 # Game of Life
 
@@ -187,10 +187,11 @@ defined in the `fitness` module. Each simulation is run for 100 steps, while a
 video is recorded. The fitness goals look at the first and / or last few frames
 of that video, and do some spot checking to see what the simulation did over
 its lifetime. For a walkthrough of the fitness goals used by this project,
-checkout the [experiment analysis]() ***TODO: link***. All fitness scores are
-integers, with an arbitrary scale for each fitness goal. Two scores for the
-same goal are comparable to each other, but they are *not* comparable with
-different goals.
+checkout the [experiment
+analysis](https://github.com/ngaylinn/epigenetic-gol-prototype-results/blob/main/ANALYSIS.md).
+All fitness scores are integers, with an arbitrary scale for each fitness goal.
+Two scores for the same goal are comparable to each other, but they are *not*
+comparable with different goals.
 
 ## Genome Configurations
 
@@ -234,9 +235,9 @@ The purpose of the `GenomeConfig` class is to shape the process of evolving a
 `GameOfLifeSimulation` by changing mutation and crossover behavior. There are
 several predefined `GenomeConfig` options in the `genome` module, which mostly
 serve as a basis for comparison (for an overview of these, check out the
-[analysis]() ***TODO: link***). This project also *evolves* a `GenomeConfig`
-for each fitness goal. How best to do that is unclear, so this project tests
-two ideas:
+[analysis](https://github.com/ngaylinn/epigenetic-gol-prototype/blob/main/README.md).
+This project also *evolves* a `GenomeConfig` for each fitness goal. How best to
+do that is unclear, so this project tests two ideas:
 - **FitnessVectors**: This lets the algorithm condition mutation and crossover
   rates based on how well an individual's parent did compared to its
   grandparent. Did fitness go up, down, or stay the same? In theory, this
@@ -319,7 +320,8 @@ basic pause / resume support, saving partial results to disk.
 The `rebuild_output` module is responsible for orchestrating all these
 experiments, analyzing the results, generating charts, and populating a
 directory with all the data. The full results with explanation and analysis can
-be found [here]() ***TODO: link***.
+be found
+[here](https://github.com/ngaylinn/epigenetic-gol-prototype/blob/main/README.md).
 
 ## Execution
 
