@@ -126,7 +126,7 @@ This genetic algorithm is different from most others in a few key ways:
       to the programmer, who must design it carefully to produce the best
       possible results for the needs of their project.
     - In this case, there are several different fitness goals and thus no one
-      best design for a gene sequence. Instead, this project consideres several
+      best design for a gene sequence. Instead, this project considers several
       different flavors of gene sequence, and even tries to evolve ones that
       perform better than the hand-designed alternatives. This gives the
       genetic algorithm a degree of influence over the design and search
