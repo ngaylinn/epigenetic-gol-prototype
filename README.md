@@ -49,7 +49,7 @@ This is just an example use case, and the algorithm should generalize to other
 problems. In addition to evolving Game of Life simulations, the demo also
 evolves different *ways* to evolve those simulations, and compares them
 head-to-head to see which is more effective. More details of this project's
-design, motivation, and execution can be found [below](#algorithm-overview).
+design, motivation, and execution can be found [below](#technical-overview).
 The full results and analysis of these experiments are available [here](
 https://github.com/ngaylinn/epigenetic-gol-prototype-results).
 
