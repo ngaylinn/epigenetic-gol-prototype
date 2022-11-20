@@ -5,13 +5,16 @@ Project by Nate Gaylinn:
 
 # Overview
 
-This is a prototype for a genetic algorithm inspired by epigenetics and modern
-evolutionary theory. The purpose of the project is to get specific about what
-such an algorithm might look like, explore how it behaves, and figure out the
-potential for future work in this space. This isn't exactly science yet. The
-hypothesis is informal. The project is not yet grounded in established work
-in the AI field. Nothing here has been analyzed or justified with appropriate
-mathematical rigor. That will come later.
+![Sample Game of Life Animation](readme-assets/sample1.gif)
+
+This is a prototype for an "epigenetic algorithm," a variant on the traditional
+genetic algorithm inspired by epigenetics and modern evolutionary theory. The
+purpose of the project is to get specific about what such an algorithm might
+look like, explore how it behaves, and figure out the potential for future work
+in this space. This isn't exactly science yet. There's no formal hypothesis.
+The project is not yet grounded in established work in the AI field. Nothing
+here has been analyzed or justified with appropriate mathematical rigor. That
+will come later.
 
 There are two observations about life on Earth that motivate this experiment:
 - Life doesn't just evolve a gene sequences for each organism. It also evolves
@@ -22,57 +25,37 @@ There are two observations about life on Earth that motivate this experiment:
 For more on this, check out the section on [biological
 realism](#biological-realism) below.
 
-One hypothesis related to these observations is that life "learns to learn."
-Evolving a genome restricts the space of possible forms an organism can take to
-ones proven effective within its niche, while leaving enough flexibility for
-individual variation and continuing evolution. Managing mutation rates allows
-life to influence the search process over this space, protecting against
-dangerous mutations in critical genes, but encouraging variation where it is
-safe and potentially useful. In short, life optimizes the search for
-lifestyles, evolving ways of finding better solutions faster over time.
+One hypothesis related to these observations is that life evolves ways to
+evolve more efficiently. The genome for a species restricts the space of
+possible forms an organism can take to ones proven effective within its niche,
+while leaving enough flexibility for individual variation and continuing
+evolution. Managing mutation rates allows life to influence the search process
+over this space, protecting against dangerous mutations in critical genes, but
+encouraging variation where it is safe and potentially useful. In short, life
+optimizes the search for lifestyles, evolving ways of finding better solutions
+faster over time.
 
-This project attempts to reproduce that dynamic and measure its effect. The
-algorithm is inherently complicated, but was kept relatively simple for the
+This project attempts to reproduce that phenomenon in an artificial context.
+The algorithm is inherently complicated, but was kept relatively simple for the
 first pass. Rather than aiming for the most dramatic results, the goal was to
-be just complicated enough to be interesting, learn something, and collect
-clear data. There are lots of exciting ways to make this algorithm better, some
-of which are discussed int he section about [future work](#future-work).
+try a few different ideas to see which ones are most promising and learn about
+the problem in the process. There are lots of exciting ways to make this
+algorithm better, some of which are discussed int he section about [future
+work](#future-work).
 
 For this demo, the algorithm is used to evolve Game of Life simulations with
 interesting properties, as determined by some arbitrarily chosen fitness goals.
-In addition to evolving simulations, the demo also evolves different *ways* to
-evolve those simulations, and compares them head-to-head to see which is more
-effective. More details of this project's design, motivation, and execution can
-be found [below](#algorithm-overview). The full results and analysis of these
-experiments are available [here](). ***TODO: Update link***
-
-active/evolved_for_active
-active/evolved_for_full
-active/evolved_for_symmetry
-active/stamp
-active/tile
-full/evolved_for_active
-full/evolved_for_full
-full/evolved_for_symmetry
-full/tile
-
-explode/evolved_for_explode
-left_to_right/control
-left_to_right/evolved_for_left_to_right
-still_life/evolved_for_symmetry
-still_life/evolved_for_two_cycle
-still_life/tile
-symmetry/evolved_for_left_to_right
-symmetry/evolved_for_symmetry
-symmetry/freeform
-symmetry/tile
-three_cycle/evolved_for_three_cycle
-two_cycle/evolved_for_three_cycle
-
-***TODO: once you've figured out the outer loop and generated all the examples
-you're going to, grab some eye-catching GOL videos from the output directory***
+This is just an example use case, and the algorithm should generalize to other
+problems. In addition to evolving Game of Life simulations, the demo also
+evolves different *ways* to evolve those simulations, and compares them
+head-to-head to see which is more effective. More details of this project's
+design, motivation, and execution can be found [below](#algorithm-overview).
+The full results and analysis of these experiments are available [here]().
+***TODO: Update link***
 
 # Game of Life
+
+![Sample Game of Life Animation](readme-assets/sample2.gif)
 
 This demo uses Conway's Game of Life (GOL) as a playground for genetic
 algorithms. For those not familiar with the GOL, you may want to check out this
@@ -98,13 +81,39 @@ interesting and useful to your community, your input would be greatly
 appreciated! Please [contact the author](mailto:nate.gaylinn@gmail.com) for
 possible collaborations.
 
-# Algorithm Overview
+# Motivation
 
-# Genetic Algorithm
+![Sample Game of Life Animation](readme-assets/sample3.gif)
+
+The biggest practical limitation of genetic algorithms is that they require an
+expert programmer to optimize the algorithm design to fit their specific use
+case. They carefully design a variety of phenotypes and encoding scheme to
+describe them with a gene sequence. They devise clever mutation and crossover
+strategies to make the search process more efficient. But why should a
+programmer to do this hard work by hand, when life can do the same thing via
+evolution?
+
+The mechanisms of epigenetics serve to manage the interpretation and variation
+of the gene sequence. This project explores one way of doing the same thing in
+an artificial context. Rather than fine-tuning the performance of a single
+genetic algorithm designed for a single fitness goal, this is more like
+searching over many possible genetic algorithms to find which one gets the best
+traction on the problem.
+
+If successful, this might one day lead to genetic algorithms that are more like
+deep learning foundation models. A powerful generic model could be built by
+specialists, then automatically fine-tuned to a specific narrow task on demand.
+It might also produce results that are more open-ended, flexible, and life-like
+than traditional genetic algorithms.
+
+# Technical Overview
+
+## Genetic Algorithm
+
+![Sample Game of Life Animation](readme-assets/sample4.gif)
 
 This is a specialized example of a genetic algorithm. For a brief intro to
-genetic algorithms for a general audience and some of the motivation for this
-project, see this [blog
+genetic algorithms for a general audience, see this [blog
 post](https://thinkingwithnate.wordpress.com/2022/10/06/why-genetic-algorithms/)
 by the author.
 
@@ -152,9 +161,9 @@ This genetic algorithm is different from most others in a few key ways:
       bias its search towards more fruitful parts of the search space based on
       prior experience.
 
-# Technical Overview
-
 ## Evolution
+
+![Sample Game of Life Animation](readme-assets/sample11.gif)
 
 The `evolution` module provides some basic infrastructure for evolving
 populations to perform well on fitness goals defined in the `fitness` module.
@@ -177,20 +186,22 @@ The fitness for a `GameOfLifeSimulation` is determined using one of the goals
 defined in the `fitness` module. Each simulation is run for 100 steps, while a
 video is recorded. The fitness goals look at the first and / or last few frames
 of that video, and do some spot checking to see what the simulation did over
-its lifetime. For a walkthrough of the fitness goals, checkout the [experiment
-analysis]() ***TODO: link***. For this project, all fitness scores are
-integers, with an arbitrary scale for each fitness goals. Two scores for the
+its lifetime. For a walkthrough of the fitness goals used by this project,
+checkout the [experiment analysis]() ***TODO: link***. All fitness scores are
+integers, with an arbitrary scale for each fitness goal. Two scores for the
 same goal are comparable to each other, but they are *not* comparable with
 different goals.
 
 ## Genome Configurations
 
+![Sample Game of Life Animation](readme-assets/sample8.gif)
+
 This project compares different ways of interpreting and modifying a gene
 sequence. This requires a more complicated model of the genome than is found in
-most genetic algorithm projects. The code for this representation is spread
-across the `genome`, `genome_configuration`, and `gene_types` modules. It uses
-several concepts borrowed from biology. Here's how those words should be
-understood within the context of this project:
+most genetic algorithms. The code for this representation is spread across the
+`genome`, `genome_configuration`, and `gene_types` modules. It uses several
+concepts borrowed from biology. Here's how those words should be understood
+within the context of this project:
 - **Gene**: The basic unit of information in the `GENOME`. Each `Gene`
   represents some data or option used to produce a `GameOfLifeSimulation`. For
   instance, there's a `Gene` representing a 2D grid of data that can be copied
@@ -222,14 +233,15 @@ understood within the context of this project:
 The purpose of the `GenomeConfig` class is to shape the process of evolving a
 `GameOfLifeSimulation` by changing mutation and crossover behavior. There are
 several predefined `GenomeConfig` options in the `genome` module, which mostly
-serve as a basis for comparison. This project also evolves a `GenomeConfig` for
-each fitness goal. How best to do that is unclear, so this project tests two
-ideas:
+serve as a basis for comparison (for an overview of these, check out the
+[analysis]() ***TODO: link***). This project also *evolves* a `GenomeConfig`
+for each fitness goal. How best to do that is unclear, so this project tests
+two ideas:
 - **FitnessVectors**: This lets the algorithm condition mutation and crossover
-  rates on how well an individual's parent did compared to its grandparent. Did
-  fitness go up, down, or stay the same? In theory, this context could allow
-  the algorithm to be more conservative to preserve useful innovations, or to
-  take greater risks out of desperation.
+  rates based on how well an individual's parent did compared to its
+  grandparent. Did fitness go up, down, or stay the same? In theory, this
+  context could allow the algorithm to be more conservative to preserve useful
+  innovations, take greater risks out of desperation, or other such strategies.
 - **Per-Gene Configuration**: Rather than tuning the evolutionary process
   globally, do it gene-by-gene. The `GeneConfig` class allows configuring
   relative mutation rates for each `Gene`, as well as setting fixed values for
@@ -239,14 +251,16 @@ ideas:
   the range of possible simulations, which could let the algorithm avoid wasted
   effort exploring less fruitful design options.
 
-This project the full cross product for both of these ideas. That is, it
+This project tests the full cross product for both of these ideas. That is, it
 evolves a `GenomeConfig` using both capabilities, with each one independently,
-and without using either of them. When both `use_fitness_vector`
-and `use_per_gene_config` are false, the project will evolve values for global
+and without using either of them. When both `use_fitness_vector` and
+`use_per_gene_config` are false, the project will evolve values for global
 crossover and mutation rates to compare against the default rates used when
 evolving `GameOfLifeSimulation`s from the predefined `GenomeConfig`s.
 
 ## Kernel Design
+
+![Sample Game of Life Animation](readme-assets/sample10.gif)
 
 This program is written in Python, mostly because it's easy to read and good
 for rapid prototyping. Python is also painfully slow to run. To work around
@@ -270,6 +284,8 @@ as a 2D bitmap.
 
 ## Experiment Design
 
+![Sample Game of Life Animation](readme-assets/sample9.gif)
+
 The `experiments` module uses the infrastructure provided in the `evolution`
 module to define genetic algorithm experiments for evolving
 `GameOfLifeSimulation`s and `GenomeConfig`s.
@@ -289,16 +305,16 @@ individual is another genetic algorithm experiment, attempting to evolve
 `simulation_experiment`, five `SimulationLineage` trials are evolved for 200
 generations each. The fitness of the `GenomeConfig` is determined by the
 `weighted_median_integral` function, which is somewhat arbitrary but chosen to
-prefer lineages that produce high-fitness `GameOfLifeSimulation`s *and* more
-reliable at increasing fitness over generations.
+prefer lineages that produce high-fitness `GameOfLifeSimulation`s *and* show
+reliably increasing fitness over generations / across trials.
 
 A single `simulation_experiment` requires evolving five lineages for 200
-generations with 32 individuals each amounts to 6,400 simulated lifestyles, but
-thanks to [GPU acceleration](#kernel-design) this only takes a few seconds. In
-contrast, a `genome_experiment` does that same process for 1,600 individual
-`GenomeConfig`s and can take *hours*. To avoid lost work and make iterative
-analysis possible, the `ExperimentState` class is used to implement basic pause
-/ resume support, saving partial results to disk.
+generations with 32 individuals each, which amounts to 6,400 simulated
+lifestyles. Thanks to [GPU acceleration](#kernel-design) this only takes a few
+seconds. In contrast, a `genome_experiment` does that same process for 1,600
+individual `GenomeConfig`s and can take *hours*. To avoid lost work and make
+iterative analysis possible, the `ExperimentState` class is used to implement
+basic pause / resume support, saving partial results to disk.
 
 The `rebuild_output` module is responsible for orchestrating all these
 experiments, analyzing the results, generating charts, and populating a
@@ -306,6 +322,8 @@ directory with all the data. The full results with explanation and analysis can
 be found [here]() ***TODO: link***.
 
 ## Execution
+
+![Sample Game of Life Animation](readme-assets/sample7.gif)
 
 This code requires an Nvidia GPU with CUDA support. It is currently configured
 for a single GPU device with [Compute Capability
@@ -347,39 +365,63 @@ For more in-depth exploration, the `debug` module provides some basic tools to
 inspect and visualize the process of evolving `GameOfLifeSimulation`s. Just
 uncomment the "debug" lines in the `experiments` module to get started.
 
+### Known Issues
+
+On some machines, this script will occasionally crash without any error or
+debug information when generating charts after a very long experiment run. It
+seems likely this is an issue in one of the underlying C++ libraries. If this
+happens, the fix is simple: restart the script, and it will pick up where it
+left off. If you have insight into this bug or would like to provide a patch,
+please contact [the author](mailto:nate.gaylinn@gmail.com). To ensure the
+program runs to completion without supervision, consider the following BASH
+script:
+
+```bash
+while true
+do
+	python3 rebuild_output.py
+	if [ $? -eq 0 ]
+	then
+		break
+	fi
+done
+```
+
 # Biological Realism
+
+![Sample Game of Life Animation](readme-assets/sample5.gif)
 
 This project is loosely inspired by the science of epigenetics (for a good
 introduction, check out [Evolution in Four
 Dimensions](https://www.goodreads.com/review/show/4526346279) by Jablonka and
-Lamb). That said, biological realism is not the goal of this project. Instead,
-it's designed to be as similar to existing genetic algorithms as possible, with
-just a couple new biologically-inspired tweaks.
+Lamb). That said, biological realism is *not* a goal here. Instead, this
+project is designed to be similar to existing genetic algorithms, with just a
+couple of biologically-inspired twists.
 
 There are two key observations about biological evolution that this program is
 exploring:
-- The language of genetics was *not* provided by the Universe, but was evolved
+- The language of genetics was *not* provided by a programmer, but was evolved
   by life itself. The tree of life represents a wide variety of forms, each
   flexible and still evolving, but working within a range of possible shapes
   and lifestyles established by the genome of each species. From a
   computational perspective, life doesn't just evolve a program that determines
   the behavior of an organism. It also evolves a programming language, an
   interpreter, and a collection of libraries for that language at the same
-  time. It accelerates learning within a lifetime by giving each organism a
-  head start, in the form of innate knowledge and behaviors.
+  time. This ought to have an accelerating effect on the process of evolution,
+  by constraining the space of possible phenotypes considered.
 - Life plays an active role in its own evolution. Mutation rates are *not*
   controlled by the Universe, but are carefully managed by evolved mechanisms
   within the cell. There are a variety of epigenetic processes that maintain
   mutation rates within a narrow range, and adjust them in response to
   experience, for the whole gene sequence, for a portion of it, or even for
-  just a single gene. This gives life a degree of self-determination. Not only
-  does life optimize the design of organisms and species, it also optimizes the
-  search for those designs.
+  just a single gene. This ought to have an accelerating effect on the process
+  of evolution, by allowing life to optimize the process of searching the space
+  of phenotypes considered.
 
-There are many ways in which this project is *not* biologically plausible. Most
-obvious is the two-tiered evolution scheme. Life doesn't separate the process
-of evolving a genome from evolving individual genotypes—both happen
-continuously. In nature, a process called “canalization” makes older, more
+There are *many* ways in which this project is *not* biologically plausible.
+Most obvious is the two-tiered evolution scheme. Life doesn't separate the
+process of evolving a genome from evolving individual genotypes—both happen
+concurrently. In nature, a process called “canalization” makes older, more
 fundamental genes more stable over time, providing a reliable background for
 the mutation of other genes. That doesn't happen in this artificial context, so
 the two-tiered design is used to approximate the same phenomenon.
@@ -387,13 +429,15 @@ the two-tiered design is used to approximate the same phenomenon.
 The genome model is inspired by DNA and its chromatin markers, but it is
 drastically simplified and resembles the real biological versions in only the
 *loosest* possible sense. The `FitnessVector` concept is sorta inspired by
-stress-induced mutation, but has no real equivalent in nature. Also, the
-standard conceit of genetic algorithms where individuals live in hermetic
-isolation and compete for a high fitness score is profoundly unrealistic.
+stress-induced mutation, but has no equivalent in nature. Also, the standard
+conceit of many genetic algorithms where individuals live in hermetic isolation
+and compete for a high fitness score is profoundly unrealistic.
 
 # Future Work
 
-This project is a proof of concept for establishing a baseline and getting
+![Sample Game of Life Animation](readme-assets/sample6.gif)
+
+This project is just a proof of concept meant to establish a baseline and get
 feedback before going too deep on a wild idea. There are lots of places where
 this work could go from here:
 - **Open-endedness**: The genome and phenotype design for this project are as
@@ -404,8 +448,8 @@ this work could go from here:
   possible to explore a much wider range of behaviors that might produce more
   dramatic results, finding better solutions, faster, to harder fitness
   challenges. The author is already considering more elaborate designs inspired
-  by (A Taxonomy for Artificial
-  Embryogeny)[https://ieeexplore.ieee.org/abstract/document/6790626] by Ken
+  by [A Taxonomy for Artificial
+  Embryogeny](https://ieeexplore.ieee.org/abstract/document/6790626) by Ken
   Stanley and Risto Miikkulainen.
 - **Other kinds of programs / reinforcement learning**: While GOL simulations
   are technically "computer programs," they are about as simple as they come

@@ -245,8 +245,7 @@ def run_simulation_trials(update_progress_callback, fitness_func,
     tuple of pd.DataFrame, GameOfLifeSimulation
         The experiment data and the best simulation found across all trials.
     """
-    fitness_data = pd.DataFrame(
-        columns=['Trial', 'Generation', 'Identifier', 'Fitness'])
+    fitness_data = pd.DataFrame()
     best_simulation = None
     for trial in range(NUM_TRIALS):
         # Set up the lineage and evolve it to completion.

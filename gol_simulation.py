@@ -13,6 +13,7 @@ import kernel
 # When exporting a simulation video, scale it up by this much to make it
 # easier to see.
 IMAGE_SCALE_FACTOR = 2
+
 # Controls the playback speed of the animated gif, including an extended
 # duration for the first frame, so you can see the phenotype clearly.
 MILLISECONDS_PER_FRAME = 100
@@ -98,14 +99,14 @@ class GameOfLifeSimulation(evolution.Evolvable):
             # Scale up each frame (without interpolation, since we want to see
             # every pixel) in both the vertical and horizontal dimensions.
             resized = frame.repeat(scale, 0).repeat(scale, 1)
-            images.append(Image.fromarray(resized, mode="L"))
+            images.append(Image.fromarray(resized, mode='L'))
         images[0].save(
             filename, save_all=True, append_images=images[1:], loop=0,
             duration=durations)
 
 
 # Breaks up a list of GameOfLifeSimulation objects into batches that will fit
-# on the GPU. This function is an iterator.
+# on the GPU. This function is a genererator.
 def _make_batches(population):
     batch_size = kernel.NUM_SIMS
     for index in range(0, len(population), batch_size):

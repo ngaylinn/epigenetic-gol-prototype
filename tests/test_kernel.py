@@ -118,7 +118,7 @@ class TestPhenotypeKernel(unittest.TestCase):
             # If the golden file wasn't found, the directory for golden files
             # might not even be set up yet, so make sure it exists.
             os.makedirs(path, exist_ok=True)
-            Image.fromarray(frame, mode="L").save(filename)
+            Image.fromarray(frame, mode='L').save(filename)
             plt.figure(f'{test_name}: Please manually verify.')
             plt.imshow(frame, cmap='gray', vmin=0, vmax=255)
             plt.axis('off')

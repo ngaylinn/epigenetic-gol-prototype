@@ -44,7 +44,7 @@ def select(population, count):
     # roulette wheel, starting at a random location.
     sample_period = total_fitness / count
     sample_offset = random.random() * sample_period
-    samples = [sample_offset + i * sample_period for i in range(count)]
+    sample_points = [sample_offset + i * sample_period for i in range(count)]
 
     # Walk around the edge of the roulette wheel to figure out which wedge
     # contains each sample point. The individual corresponding to that wedge /
@@ -59,7 +59,7 @@ def select(population, count):
     # but will do so in the first iteration of the loop below.
     index = -1
     fitness_so_far = 0
-    for sample in samples:
+    for sample in sample_points:
         # Step through the wedges one at a time to find the one that overlaps
         # with this sample point. This could happen 0 times if the last wedge
         # is so big it contains this next sample point, too, or it could happen
@@ -165,8 +165,7 @@ class Lineage(abc.ABC):
         The single most fit individual found across all generations.
     """
     def __init__(self):
-        self.fitness_data = pd.DataFrame(
-            columns=['Generation', 'Identifier', 'Fitness'])
+        self.fitness_data = pd.DataFrame()
         self.generation = 0
         self.population = None
         self.best_individual = None
@@ -258,7 +257,8 @@ class Lineage(abc.ABC):
         Returns
         -------
         bool
-            True iff the last generation has been completed.
+            True if evolution should continue after calling this function,
+            False if the last generation has already been reached.
         """
         if self.generation == 0:
             # Defer to the subclass to supply the initial population.

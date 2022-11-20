@@ -125,7 +125,7 @@ def three_cycle(prev_a, prev_b, prev_c, last_a, last_b, last_c):
     a_same = last_a == prev_a
     b_same = last_b == prev_b
     c_same = last_c == prev_c
-    # Find cells that stayed the same across all six frames.
+    # Find cells that stayed the same across the last three frames.
     static = np.logical_and(last_a == last_b, last_b == last_c)
     # Find cells that had consistent values in frames three steps apart but
     # where not the same from frame to frame.

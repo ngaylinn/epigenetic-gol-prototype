@@ -150,7 +150,7 @@ def run_simulations():
     # unfortunately that would require thread synchronization of the blocks
     # that comprise a single simulation. Numba doesn't support syncing just
     # the threads for those groups of blocks, and the GPU doesn't support
-    # syncing all the threads, so we must invoke the kernel many times.
+    # syncing all threads on device, so we must invoke the kernel many times.
     for step in range(SIMULATION_RUN_LENGTH - 1):
         _simulation_kernel[
             # Layout blocks into grids
@@ -172,9 +172,9 @@ def _phenotype_kernel(genotypes, frames):
     if not in_bounds(row, col):
         return
 
-    # Unfortunately, Numba doesn't support structured arrays very well, so we
-    # have to unpack the genotype fields manually, in the same order they are
-    # defined in genome.GENOME.
+    # Unfortunately, Numba doesn't support Numpy structured arrays very well,
+    # so we have to unpack the genotype fields manually, in the same order they
+    # are defined in genome.GENOME.
     genotype = genotypes[sim_index]
     seed = genotype[0]
     stamp = genotype[1]
@@ -193,7 +193,7 @@ def _phenotype_kernel(genotypes, frames):
         return
 
     # At this point, we know we're drawing stamps. By default, assume the stamp
-    # doesn't target this position and draw nothing.
+    # doesn't target this position and draw a blank cell.
     phenotype[row][col] = DEAD
 
     # A repeat_offset of (0, 0) is non-sensical and could cause division by

@@ -106,9 +106,16 @@ class SimulationLineageDebugger:
     # A callback run on each generation of the lineage, checking to see whether
     # a break is requested and visualizing the relevant data.
     def _on_generation(self, generation, population):
-        print('_on_generation')
-        prev_fitness = self.lineage.fitness_by_generation[generation - 1]
-        curr_fitness = self.lineage.fitness_by_generation[generation]
+        prev_fitness = (
+            self.lineage.fitness_data
+            .where(self.lineage.fitness_data['Generation'] == generation - 1)
+            .get('Fitness')
+            .max())
+        curr_fitness = (
+            self.lineage.fitness_data
+            .where(self.lineage.fitness_data['Generation'] == generation)
+            .get('Fitness')
+            .max())
         delta = curr_fitness - prev_fitness
         # If there was a big jump in fitness
         if (delta > self.max_fitness_delta or delta < self.min_fitness_delta):
@@ -126,8 +133,8 @@ class SimulationLineageDebugger:
             self._visualize_population(generation, population)
             self._visualize_breeding(generation)
         # If we didn't already show watched for breeding events for this
-        # generation, in conjunction with some other visualization, then show
-        # the breeding event on its own.
+        # generation in conjunction with some other visualization above, then
+        # show them now.
         else:
             self._visualize_breeding(generation)
         # Show all the data visualizations triggered by this generation.

@@ -149,17 +149,20 @@ class Genotype:
             is present, that indicates that should_crossover was already called
             and returned True.
         """
-        child = Genotype(self.genome_config, self.data)
+        # Start by making a child_genotype which is just a clone of the parent.
+        child_genotype = Genotype(self.genome_config, self.data)
+        # Update the fitness_vector value.
         if parent_fitness > grandparent_fitness:
-            child.fitness_vector = FitnessVector.BETTER
+            child_genotype.fitness_vector = FitnessVector.BETTER
         elif parent_fitness < grandparent_fitness:
-            child.fitness_vector = FitnessVector.WORSE
+            child_genotype.fitness_vector = FitnessVector.WORSE
         else:
-            child.fitness_vector = FitnessVector.SAME
+            child_genotype.fitness_vector = FitnessVector.SAME
+        # Maybe perform crossover and mutation to vary the child genotype.
         if mate_genotype:
-            child.crossover(mate_genotype)
-        child.mutate()
-        return child
+            child_genotype.crossover(mate_genotype)
+        child_genotype.mutate()
+        return child_genotype
 
     def crossover(self, mate_genotype):
         """Perform crossover, randomly adopting genes from mate_genotype."""
