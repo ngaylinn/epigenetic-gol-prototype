@@ -266,9 +266,9 @@ evolving `GameOfLifeSimulation`s from the predefined `GenomeConfig`s.
 This program is written in Python, mostly because it's easy to read and good
 for rapid prototyping. Python is also painfully slow to run. To work around
 this limitation, the inner loop of this program is optimized. It uses the Numba
-library to transpile Python code into C, which is just-in-time-compiled and run
-on an Nvidia GPU using the CUDA library. This enables running 32 GOL
-simulations for 100 steps in parallel in just a few milliseconds.
+library to just-in-time-compile this code and run on an Nvidia GPU using the
+CUDA library. This enables running 32 GOL simulations for 100 steps in parallel
+in just a few milliseconds.
 
 The `kernel` module contains all the CUDA code, which is used to translate the
 genotype into a GOL simulation and run that simulation to completion. It
