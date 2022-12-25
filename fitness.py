@@ -114,8 +114,10 @@ def two_cycle(prev_even, prev_odd, last_even, last_odd):
     static = last_odd == last_even
     # Count the number of cells that were the same two frames apart but were
     # not the same from frame to frame.
-    return np.count_nonzero(
-        np.logical_and(odd_same == even_same, np.logical_not(static)))
+    cycling = np.logical_and(
+        odd_same, np.logical_and(
+            even_same, np.logical_not(static)))
+    return np.count_nonzero(cycling)
 
 
 @fitness_goal([-6, -5, -4, -3, -2, -1])
