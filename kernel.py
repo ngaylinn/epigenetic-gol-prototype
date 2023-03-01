@@ -35,6 +35,12 @@ import numpy as np
 # (See https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#compute-capabilities)
 # So, 32 * (2 * 2) == 128 blocks, which is 100% utilization.
 
+# -----------------------------------------------------------------------------
+# WARNING: This calculation is based on a flawed understand of occupancy and
+# does not take full advantage of the GPU's power. The v2 of this project will
+# be WAY faster, but there are no plans to improve the prototype.
+# -----------------------------------------------------------------------------
+
 # The size of one side of the a square simulated world
 WORLD_SIZE = 64
 
